@@ -78,6 +78,7 @@ class SelectClassIDDialog(QDialog):
         self.class_id = 0
         self.cur = DB_INST.cursor()
         self.initUI()
+        self.edited = False
 
 
     def hahaha(self, e):
@@ -219,32 +220,23 @@ class StockWidget(QWidget):
 
     def eventFilter(self, obj, e):
         if obj.objectName() == 'item_class_id' and e.type() == QEvent.FocusIn:
-            print('hahaha')
+            if self.class_selector.edited == False:
+                self.class_selector.open()
+                self.class_selector.edited = True
             return True
-        return False
+        else:
+            return False
 
-
-# class MWQLineEdit(QLineEdit):
-#     def __init__(self, selector):
-#         super().__init__()
-#         self.selector = selector
-#         self.is_ready = True
-
-#     def focusInEvent(self, e):
-#         print(9999, self.is_ready)
-#         if self.is_ready:
-#             self.selector.open()
-#             self.is_ready = False
     def keyPressEvent(self, e):
         doKeyPressEvent(e, self.handleBarcode)
         return super().keyPressEvent(e)
 
-    def ddd(self, code):
+    def updateClassId(self, code):
         item = self.focusWidget()
         if code == QDialog.DialogCode.Accepted:
             item.setText(str(self.class_selector.class_id))
 
-        item.is_ready = True
+        self.class_selector.edited = False
         self.setFocus(True)
 
     def initUI(self):
@@ -255,16 +247,16 @@ class StockWidget(QWidget):
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
         self.class_selector = SelectClassIDDialog(self)
-        self.class_selector.finished.connect(self.ddd)
+        self.class_selector.finished.connect(self.updateClassId)
 
-        clear_btn = QPushButton('Clear')
-        import_btn = QPushButton('Import')
+        btn_clear = QPushButton('Clear')
+        btn_import = QPushButton('Import')
         vbox = QVBoxLayout()
-        vbox.addWidget(clear_btn)
+        vbox.addWidget(btn_clear)
         vbox.addStretch(1)
-        vbox.addWidget(import_btn)
-        clear_btn.clicked.connect(self.clearTbl)
-        import_btn.clicked.connect(self.doImport)
+        vbox.addWidget(btn_import)
+        btn_clear.clicked.connect(self.clearTbl)
+        btn_import.clicked.connect(self.doImport)
 
         hbox = QHBoxLayout()
         hbox.addWidget(self.tbl)
@@ -347,7 +339,6 @@ class StockWidget(QWidget):
         item_barcode = QTableWidgetItem(barcode)
         item_goods_name = QTableWidgetItem(goods_name)
         item_stock_num = MWSpinBox()
-        # class_id_item = MWQLineEdit(self.class_selector)
         item_class_id = QLineEdit(objectName='item_class_id')
         item_class_id.installEventFilter(self)
         
