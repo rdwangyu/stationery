@@ -602,7 +602,7 @@ class MainWidget(QWidget):
         layout.addWidget(self.tab, 0, 0, 1, 1)
         self.setLayout(layout)
 
-        self.setWindowTitle('TEST')
+        self.setWindowTitle('STATIONERY v1.0')
         self.showMaximized()
 
 
