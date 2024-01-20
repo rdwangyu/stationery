@@ -9,7 +9,10 @@ import psycopg2
 
 BARCODE = ""
 DB_INST = None
-
+DB_INVERTORY = 'inventory'
+DB_CATEGORY = 'category'
+DB_ORDERS = 'orders'
+DB_ORDERDETAIL = 'orderdetail'
 
 def InitDB():
     inst = psycopg2.connect(
@@ -71,11 +74,13 @@ class ClassSelector(QDialog):
         vbox.addLayout(hbox)
         self.setLayout(vbox)
 
+        self.setWindowTitle('Categories')
         self.resize(1920, 1080)
 
     def buildClassTree(self):
+        self.class_tree.setHeaderHidden(True)
         self.cur.execute(
-            "SELECT class0,class1,ext0,ext1,ext2,ext3,ext4,id FROM mwclass ORDER BY class0,class1,ext0,ext1,ext2,ext3,ext4")
+            f"SELECT class0,class1,ext0,ext1,ext2,ext3,ext4,id FROM {DB_CATEGORY} ORDER BY class0,class1,ext0,ext1,ext2,ext3,ext4")
         self.model = QStandardItemModel()
         self.class_tree.setModel(self.model)
 
@@ -91,11 +96,13 @@ class ClassSelector(QDialog):
                 class0.setEditable(False)
                 root.appendRow(class0)
                 temp[0] = data[0]
+                temp[1:] = [''] * 6
 
             if ''.join(temp[0:2]) != ''.join(data[0:2]):
                 class1 = QStandardItem(data[1])
                 class0.appendRow(class1)
                 temp[1] = data[1]
+                temp[2:] = [''] * 5
 
             if len(data[2]) == 0:
                 class1.setFlags(class1.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -105,6 +112,7 @@ class ClassSelector(QDialog):
                 ext0 = QStandardItem(data[2])
                 class1.appendRow(ext0)
                 temp[2] = data[2]
+                temp[3:] = [''] * 4
 
             if len(data[3]) == 0:
                 ext0.setFlags(ext0.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -114,6 +122,7 @@ class ClassSelector(QDialog):
                 ext1 = QStandardItem(data[3])
                 ext0.appendRow(ext1)
                 temp[3] = data[3]
+                temp[4:] = [''] * 3
 
             if len(data[4]) == 0:
                 ext1.setFlags(ext1.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -123,6 +132,7 @@ class ClassSelector(QDialog):
                 ext2 = QStandardItem(data[4])
                 ext1.appendRow(ext2)
                 temp[4] = data[4]
+                temp[5:] = [''] * 2
 
             if len(data[5]) == 0:
                 ext2.setFlags(ext2.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -132,6 +142,7 @@ class ClassSelector(QDialog):
                 ext3 = QStandardItem(data[5])
                 ext2.appendRow(ext3)
                 temp[5] = data[5]
+                temp[6] = ''
 
             if len(data[6]) == 0:
                 ext3.setFlags(ext3.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -251,7 +262,6 @@ class StockWidget(QWidget):
         item_stock_num.setValue(stock_num)
 
         item_class_id = QLineEdit(objectName='lineedit_popup_dialog')
-        item_class_id.setReadOnly(True)
         item_class_id.setText(str(class_id))
         item_class_id.setProperty('index', item_goods_name)
         item_class_id.textChanged.connect(self.updateGoodsName)
@@ -306,15 +316,15 @@ class StockWidget(QWidget):
             brand = self.tbl.cellWidget(row, self.col_brand).text()
 
             if stock_id == 0:
-                sql = """
-                    INSERT INTO mwstock(barcode,num,saleprice,inputprice,classid,brand,remark)
+                sql = f"""
+                    INSERT INTO {DB_INVERTORY}(barcode,num,saleprice,inputprice,classid,brand,remark)
                     VALUES(%s,%s,%s,%s,%s,%s,%s)
                     """
                 self.cur.execute(
                     sql, (barcode, stock_num, sale_price, input_price, class_id, brand, remark))
             else:
-                sql = """
-                    UPDATE mwstock
+                sql = f"""
+                    UPDATE {DB_INVERTORY}
                     SET num=%s, saleprice=%s, inputprice=%s, classid=%s, brand=%s, remark=%s
                     WHERE id=%s
                     """
@@ -332,7 +342,7 @@ class StockWidget(QWidget):
 
     def updateGoodsName(self, class_id):
         self.cur.execute(
-            "SELECT CONCAT(class0, class1, ext0, ext1, ext2, ext3, ext4) AS goodsname FROM mwclass WHERE id=%s", (class_id,))
+            f"SELECT CONCAT(class0, class1, ext0, ext1, ext2, ext3, ext4) AS goodsname FROM {DB_CATEGORY} WHERE id=%s", (class_id,))
         data = self.cur.fetchone()
         item = self.sender().property('index')
         item.setText(data[0])
@@ -342,8 +352,7 @@ class StockWidget(QWidget):
             QMessageBox.warning(self, 'WARNING', 'barcode null')
             return
 
-        sql = """
-
+        sql = f"""
             SELECT  s.id,
                     s.barcode,
                     CONCAT(c.class0, c.class1, c.ext0, c.ext1, c.ext2, c.ext3, c.ext4) AS goodsname,
@@ -353,11 +362,10 @@ class StockWidget(QWidget):
                     CAST(s.saleprice AS DECIMAL(5, 2)),
                     s.remark,
                     s.brand
-            FROM mwstock AS s
-            LEFT JOIN mwclass AS c ON s.classid = c.id
-            WHERE barcode='{}'
-
-            """.format(barcode)
+            FROM {DB_INVERTORY} AS s
+            LEFT JOIN {DB_CATEGORY} AS c ON s.classid = c.id
+            WHERE barcode='{barcode}'
+            """
         self.cur.execute(sql)
         data = self.cur.fetchone()
         self.addRow(data, barcode)
@@ -496,17 +504,15 @@ class SettleWidget(QWidget):
             QMessageBox.warning(self, 'WARNING', 'barcode null')
             return
 
-        sql = '''
-            
+        sql = f'''
             SELECT  s.id,
                     s.barcode,
                     CONCAT(c.class0, c.class1, c.ext0, c.ext1, c.ext2, c.ext3, c.ext4) AS goodsname,
                     CAST(s.saleprice AS DECIMAL(5, 2))
-            FROM mwstock AS s
-            LEFT JOIN mwclass AS c ON s.classid = c.id
-            WHERE barcode='{}'
-            
-            '''.format(barcode)
+            FROM {DB_INVERTORY} AS s
+            LEFT JOIN {DB_CATEGORY} AS c ON s.classid = c.id
+            WHERE barcode='{barcode}'
+            '''
         self.cur.execute(sql)
         data = self.cur.fetchone()
         if data:
@@ -532,12 +538,10 @@ class SettleWidget(QWidget):
         deduction = 0
         payment = total_price_item.text()
 
-        sql = """
-            
-            INSERT INTO mwordersummary(num,price,deduction,payment)
+        sql = f"""
+            INSERT INTO {DB_ORDERS}(num,price,deduction,payment)
             VALUES(%s,%s,%s,%s)
             RETURNING id
-
             """
         self.cur.execute(sql, (total_num_item.text(),
                          total_price_item.text(), deduction, payment))
@@ -551,8 +555,8 @@ class SettleWidget(QWidget):
             item_price = self.tbl.item(row, self.col_price)
             item_num = self.tbl.cellWidget(row, self.col_num)
 
-            sql = """
-                INSERT INTO mworderdetail(stockid,num,price,orderid)
+            sql = f"""
+                INSERT INTO {DB_ORDERDETAIL}(stockid,num,price,orderid)
                 VALUES(%s,%s,%s,%s)
                 """
             self.cur.execute(sql, (item_stock_id.text(), item_num.value(),
@@ -562,7 +566,7 @@ class SettleWidget(QWidget):
                     self, 'ERROR', 'order detail add failed')
                 exit()
 
-            sql = "UPDATE mwstock SET num=num-%s WHERE id=%s"
+            sql = f"UPDATE {DB_INVERTORY} SET num=num-%s WHERE id=%s"
             self.cur.execute(sql, (item_num.value(), item_stock_id.text()))
             if self.cur.rowcount != 1:
                 QMessageBox.critical(self, 'ERROR', 'stock update failed')
