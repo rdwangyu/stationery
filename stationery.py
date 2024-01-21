@@ -194,9 +194,9 @@ class StockWidget(QWidget):
                 self.class_selector.open()
                 return True
         if e.type() == QEvent.FocusIn:
-            if obj.objectName() == 'spinbox_selectall':
-                obj.selectAll()
-                return True
+            if obj.objectName() == 'obj_selectall':
+                QTimer.singleShot(0, obj.selectAll)
+                return False
         return self.parent.eventFilter(obj, e)
 
     def initUI(self):
@@ -258,8 +258,10 @@ class StockWidget(QWidget):
         item_goods_name.setFlags(
             item_goods_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-        item_stock_num = QSpinBox(objectName='spinbox_selectall')
+        item_stock_num = QSpinBox(objectName='obj_selectall')
         item_stock_num.setValue(stock_num)
+        item_stock_num.setMaximum(10000)
+        item_stock_num.installEventFilter(self)
 
         item_class_id = QLineEdit(objectName='lineedit_popup_dialog')
         item_class_id.setText(str(class_id))
@@ -267,13 +269,17 @@ class StockWidget(QWidget):
         item_class_id.textChanged.connect(self.updateGoodsName)
         item_class_id.installEventFilter(self)
 
-        item_input_price = QDoubleSpinBox(objectName='spinbox_selectall')
+        item_input_price = QDoubleSpinBox(objectName='obj_selectall')
         item_input_price.setSingleStep(0.5)
+        item_input_price.setMaximum(9999.99)
         item_input_price.setValue(input_price)
+        item_input_price.installEventFilter(self)
 
-        item_sale_price = QDoubleSpinBox(objectName='spinbox_selectall')
+        item_sale_price = QDoubleSpinBox(objectName='obj_selectall')
         item_sale_price.setSingleStep(0.5)
+        item_sale_price.setMaximum(9999.99)
         item_sale_price.setValue(sale_price)
+        item_sale_price.installEventFilter(self)
 
         item_remark = QLineEdit(remark)
         item_brand = QLineEdit(brand)
@@ -589,8 +595,13 @@ class MainWidget(QWidget):
 
     def eventFilter(self, obj, e):
         if e.type() == QEvent.KeyPress:
-            DoKeyPressEvent(e, self.tab.currentWidget().handleBarcode)
-            return True
+            if not isinstance(obj, (QSpinBox, QDoubleSpinBox)):
+                DoKeyPressEvent(e, self.tab.currentWidget().handleBarcode)
+                return True
+            else:
+                if e.key() == Qt.Key_Enter or e.key() == Qt.Key_Return:
+                    obj.clearFocus()
+                    return True
         return False
 
     def initUI(self):
