@@ -4,25 +4,11 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 from PyQt5.QtGui import *
-import psycopg2
+import requests
 
 
 BARCODE = ""
-DB_INST = None
-DB_INVERTORY = 'inventory'
-DB_CATEGORY = 'category'
-DB_ORDERS = 'orders'
-DB_ORDERDETAIL = 'orderdetail'
-
-def InitDB():
-    inst = psycopg2.connect(
-        "dbname=postgres user=postgres password=123456")
-    cursor = inst.cursor()
-    cursor.execute("SELECT version()")
-    if cursor.fetchone() is None:
-        QMessageBox.critical('ERROR', 'database connected failed')
-        exit()
-    return inst
+URL = 'http://127.0.0.1:8000/cli'
 
 
 def DoKeyPressEvent(e, handle_barcode_cb):
@@ -48,153 +34,149 @@ def FindRow(kw, tbl, col):
     return -1
 
 
-class ClassSelector(QDialog):
+class CategorySelector(QDialog):
     def __init__(self):
         super().__init__()
-        self.cur = DB_INST.cursor()
-        self.class_id_selected = 0
+        self.category_id = 0
         self.initUI()
 
     def initUI(self):
-        self.class_tree = QTreeView()
-        self.buildClassTree()
-        self.class_tree.clicked.connect(self.class_tree.expand)
-        self.class_tree.doubleClicked.connect(self.doConfirm)
+        self.category_tree = QTreeView()
+        self.buildCategoryTree()
+        self.category_tree.clicked.connect(self.onExpand)
+        self.category_tree.doubleClicked.connect(self.onConfirm)
 
-        confirm_btn = QPushButton('Confirm')
-        cancel_btn = QPushButton('Cancel')
-        confirm_btn.clicked.connect(self.doConfirm)
+        confirm_btn = QPushButton('确认')
+        cancel_btn = QPushButton('取消')
+        confirm_btn.clicked.connect(self.onConfirm)
         cancel_btn.clicked.connect(self.reject)
 
         hbox = QHBoxLayout()
         hbox.addWidget(confirm_btn)
         hbox.addWidget(cancel_btn)
         vbox = QVBoxLayout()
-        vbox.addWidget(self.class_tree)
+        vbox.addWidget(self.category_tree)
         vbox.addLayout(hbox)
         self.setLayout(vbox)
 
-        self.setWindowTitle('Categories')
+        self.setWindowTitle('分类')
         self.resize(1920, 1080)
 
-    def buildClassTree(self):
-        self.class_tree.setHeaderHidden(True)
-        self.cur.execute(
-            f"SELECT class0,class1,ext0,ext1,ext2,ext3,ext4,id FROM {DB_CATEGORY} ORDER BY class0,class1,ext0,ext1,ext2,ext3,ext4")
+    def buildCategoryTree(self):
+        self.category_tree.setHeaderHidden(True)
         self.model = QStandardItemModel()
-        self.class_tree.setModel(self.model)
+        self.category_tree.setModel(self.model)
 
         temp = ['', '', '', '', '', '', '']
         root = self.model.invisibleRootItem()
-        while True:
-            data = self.cur.fetchone()
-            if data is None:
-                break
-            id = data[7]
-            if ''.join(temp[0:1]) != ''.join(data[0:1]):
-                class0 = QStandardItem(data[0])
-                class0.setEditable(False)
-                root.appendRow(class0)
-                temp[0] = data[0]
+        resp = requests.get(URL + '/categories')
+        resp = resp.json()
+        for i in range(len(resp)):
+            data = resp[i]
+            id = data['id']
+            if ''.join(temp[0:1]) != data['class_0']:
+                class_0 = QStandardItem(data['class_0'])
+                class_0.setEditable(False)
+                root.appendRow(class_0)
+                temp[0] = data['class_0']
                 temp[1:] = [''] * 6
 
-            if ''.join(temp[0:2]) != ''.join(data[0:2]):
-                class1 = QStandardItem(data[1])
-                class0.appendRow(class1)
-                temp[1] = data[1]
+            if ''.join(temp[0:2]) != data['class_0'] + data['class_1']:
+                class_1 = QStandardItem(data['class_1'])
+                class_0.appendRow(class_1)
+                temp[1] = data['class_1']
                 temp[2:] = [''] * 5
 
-            if len(data[2]) == 0:
-                class1.setFlags(class1.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                class1.setData(id, Qt.ItemDataRole.UserRole)
+            if len(data['ext_0']) == 0:
+                class_1.setFlags(class_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                class_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:3]) != ''.join(data[0:3]):
-                ext0 = QStandardItem(data[2])
-                class1.appendRow(ext0)
-                temp[2] = data[2]
+            if ''.join(temp[0:3]) != data['class_0'] + data['class_1'] + data['ext_0']:
+                ext_0 = QStandardItem(data['ext_0'])
+                class_1.appendRow(ext_0)
+                temp[2] = data['ext_0']
                 temp[3:] = [''] * 4
 
-            if len(data[3]) == 0:
-                ext0.setFlags(ext0.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                ext0.setData(id, Qt.ItemDataRole.UserRole)
+            if len(data['ext_1']) == 0:
+                ext_0.setFlags(ext_0.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                ext_0.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:4]) != ''.join(data[0:4]):
-                ext1 = QStandardItem(data[3])
-                ext0.appendRow(ext1)
-                temp[3] = data[3]
+            if ''.join(temp[0:4]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1']:
+                ext_1 = QStandardItem(data['ext_1'])
+                ext_0.appendRow(ext_1)
+                temp[3] = data['ext_1']
                 temp[4:] = [''] * 3
 
-            if len(data[4]) == 0:
-                ext1.setFlags(ext1.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                ext1.setData(id, Qt.ItemDataRole.UserRole)
+            if len(data['ext_2']) == 0:
+                ext_1.setFlags(ext_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                ext_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:5]) != ''.join(data[0:5]):
-                ext2 = QStandardItem(data[4])
-                ext1.appendRow(ext2)
-                temp[4] = data[4]
+            if ''.join(temp[0:5]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2']:
+                ext_2 = QStandardItem(data['ext_2'])
+                ext_1.appendRow(ext_2)
+                temp[4] = data['ext_2']
                 temp[5:] = [''] * 2
 
-            if len(data[5]) == 0:
-                ext2.setFlags(ext2.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                ext2.setData(id, Qt.ItemDataRole.UserRole)
+            if len(data['ext_3']) == 0:
+                ext_2.setFlags(ext_2.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                ext_2.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:6]) != ''.join(data[0:6]):
-                ext3 = QStandardItem(data[5])
-                ext2.appendRow(ext3)
-                temp[5] = data[5]
+            if ''.join(temp[0:6]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2'] + data['ext_3']:
+                ext_3 = QStandardItem(data['ext_3'])
+                ext_2.appendRow(ext_3)
+                temp[5] = data['ext_3']
                 temp[6] = ''
 
-            if len(data[6]) == 0:
-                ext3.setFlags(ext3.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                ext3.setData(id, Qt.ItemDataRole.UserRole)
+            if len(data['ext_4']) == 0:
+                ext_3.setFlags(ext_3.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                ext_3.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:7]) != ''.join(data[0:7]):
-                ext4 = QStandardItem(data[6])
-                ext3.appendRow(ext4)
-                temp[6] = data[6]
-                ext4.setFlags(ext4.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                ext4.setData(id, Qt.ItemDataRole.UserRole)
+            if ''.join(temp[0:7]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2'] + data['ext_3'] + data['ext_4']:
+                ext_4 = QStandardItem(data['ext_4'])
+                ext_3.appendRow(ext_4)
+                temp[6] = data['ext_4']
+                ext_4.setFlags(ext_4.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                ext_4.setData(id, Qt.ItemDataRole.UserRole)
 
-    def doConfirm(self, e):
-        index = self.class_tree.selectedIndexes()
-        if len(index) == 0:
-            return
-        item = self.model.itemFromIndex(index[0])
+    def onConfirm(self, index):
+        item = self.model.itemFromIndex(index)
         if item.hasChildren():
             return
-        self.class_id_selected = item.data(Qt.ItemDataRole.UserRole)
+        self.category_id = item.data(Qt.ItemDataRole.UserRole)
         self.accept()
+
+    def onExpand(self, index):
+        self.category_tree.collapse(index) if self.category_tree.isExpanded(
+            index) else self.category_tree.expand(index)
 
 
 class StockWidget(QWidget):
-    col_sys_id = 0
+    col_id = 0
     col_barcode = 1
-    col_goods_name = 2
-    col_class_id = 3
-    col_stock_num = 4
-    col_input_price = 5
-    col_sale_price = 6
+    col_name = 2
+    col_category_id = 3
+    col_num = 4
+    col_purchase_price = 5
+    col_retail_price = 6
     col_remark = 7
     col_brand = 8
     col_op = 9
 
-    title = ["SYSID", "Barcode", "Goods Name", "Class ID", "Stock Num",
-             "Input Price", "Sale Price", "Remark", "Brand", "..."]
+    title = ["ID", "条码", "商品名", "分类", "库存",
+             "成本", "售价", "备注", "品牌", "操作"]
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.db = DB_INST
-        self.cur = DB_INST.cursor()
         self.initUI()
 
     def eventFilter(self, obj, e):
         if e.type() == QEvent.MouseButtonPress:
-            if obj.objectName() == 'lineedit_popup_dialog':
-                self.class_selector.open()
+            if obj.objectName() == 'category_selector':
+                self.category_selector.open()
                 return True
         if e.type() == QEvent.FocusIn:
-            if obj.objectName() == 'obj_selectall':
+            if obj.objectName() == 'my_line_edit':
                 QTimer.singleShot(0, obj.selectAll)
                 return False
         return self.parent.eventFilter(obj, e)
@@ -207,17 +189,17 @@ class StockWidget(QWidget):
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tbl.installEventFilter(self)
 
-        self.class_selector = ClassSelector()
-        self.class_selector.finished.connect(self.updateClass)
+        self.category_selector = CategorySelector()
+        self.category_selector.finished.connect(self.updateCategory)
 
-        btn_clear = QPushButton('Clear')
-        btn_import = QPushButton('Import')
+        btn_clear = QPushButton('清理')
+        btn_import = QPushButton('入库')
         vbox = QVBoxLayout()
         vbox.addWidget(btn_clear)
         vbox.addStretch(1)
         vbox.addWidget(btn_import)
-        btn_clear.clicked.connect(self.clearTbl)
-        btn_import.clicked.connect(self.doImport)
+        btn_clear.clicked.connect(self.onClear)
+        btn_import.clicked.connect(self.onImport)
 
         hbox = QHBoxLayout()
         hbox.addWidget(self.tbl)
@@ -225,156 +207,129 @@ class StockWidget(QWidget):
         self.setLayout(hbox)
 
     def addRow(self, data, barcode):
-        print('data:', data, barcode)
+        print(data)
 
         row = FindRow(barcode, self.tbl, self.col_barcode)
         if row != -1:
-            item = self.tbl.cellWidget(row, self.col_stock_num)
+            item = self.tbl.cellWidget(row, self.col_num)
             item.setValue(item.value() + 1)
             return
 
         row = self.tbl.rowCount()
         self.tbl.setRowCount(row + 1)
 
-        stock_id = 0
-        class_id = 0
-        stock_num = 1
-        goods_name = ''
-        remark = ''
-        brand = ''
-        input_price = 0.00
-        sale_price = 0.00
-        if data:
-            stock_id, barcode, goods_name, class_id, stock_num, input_price, sale_price, remark, brand = data
+        id = data.get('id', 0)
+        category = data.get('category', {'id': 1})
+        num = data.get('num', 1)
+        name = data.get('name', '')
+        remark = data.get('remark', '')
+        brand = data.get('brand', '')
+        cost_price = data.get('cost_price', 0)
+        retail_price = data.get('retail_price', 0)
 
-        item_sys_id = QTableWidgetItem(str(stock_id))
-        item_sys_id.setFlags(item_sys_id.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        item_id = QTableWidgetItem(str(id))
+        item_id.setFlags(item_id.flags() & ~
+                         Qt.ItemFlag.ItemIsEditable)
 
         item_barcode = QTableWidgetItem(barcode)
         item_barcode.setFlags(item_barcode.flags() & ~
                               Qt.ItemFlag.ItemIsEditable)
 
-        item_goods_name = QTableWidgetItem(goods_name)
-        item_goods_name.setFlags(
-            item_goods_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        item_name = QLineEdit(name)
 
-        item_stock_num = QSpinBox(objectName='obj_selectall')
-        item_stock_num.setValue(stock_num)
-        item_stock_num.setMaximum(10000)
-        item_stock_num.installEventFilter(self)
+        item_num = QSpinBox(objectName='my_line_edit')
+        item_num.setValue(num)
+        item_num.setMaximum(10000)
+        item_num.installEventFilter(self)
 
-        item_class_id = QLineEdit(objectName='lineedit_popup_dialog')
-        item_class_id.setText(str(class_id))
-        item_class_id.setProperty('index', item_goods_name)
-        item_class_id.textChanged.connect(self.updateGoodsName)
-        item_class_id.installEventFilter(self)
+        item_category_id = QLineEdit(objectName='category_selector')
+        item_category_id.setText(str(category['id']))
+        item_category_id.setProperty('index', item_name)
+        item_category_id.installEventFilter(self)
 
-        item_input_price = QDoubleSpinBox(objectName='obj_selectall')
-        item_input_price.setSingleStep(0.5)
-        item_input_price.setMaximum(9999.99)
-        item_input_price.setValue(input_price)
-        item_input_price.installEventFilter(self)
+        item_cost_price = QDoubleSpinBox(objectName='my_line_edit')
+        item_cost_price.setSingleStep(0.5)
+        item_cost_price.setMaximum(9999.99)
+        item_cost_price.setValue(float(cost_price))
+        item_cost_price.installEventFilter(self)
 
-        item_sale_price = QDoubleSpinBox(objectName='obj_selectall')
-        item_sale_price.setSingleStep(0.5)
-        item_sale_price.setMaximum(9999.99)
-        item_sale_price.setValue(sale_price)
-        item_sale_price.installEventFilter(self)
+        item_retail_price = QDoubleSpinBox(objectName='my_line_edit')
+        item_retail_price.setSingleStep(0.5)
+        item_retail_price.setMaximum(9999.99)
+        item_retail_price.setValue(float(retail_price))
+        item_retail_price.installEventFilter(self)
 
         item_remark = QLineEdit(remark)
         item_brand = QLineEdit(brand)
 
-        btn_remove = QPushButton('Remove')
+        btn_remove = QPushButton('移除')
         btn_remove.clicked.connect(self.removeRow)
 
-        self.tbl.setItem(row, self.col_sys_id, item_sys_id)
+        self.tbl.setItem(row, self.col_id, item_id)
         self.tbl.setItem(row, self.col_barcode, item_barcode)
-        self.tbl.setItem(row, self.col_goods_name, item_goods_name)
-        self.tbl.setCellWidget(row, self.col_stock_num, item_stock_num)
-        self.tbl.setCellWidget(row, self.col_class_id, item_class_id)
-        self.tbl.setCellWidget(row, self.col_input_price, item_input_price)
-        self.tbl.setCellWidget(row, self.col_sale_price, item_sale_price)
+        self.tbl.setCellWidget(row, self.col_name, item_name)
+        self.tbl.setCellWidget(row, self.col_num, item_num)
+        self.tbl.setCellWidget(row, self.col_category_id, item_category_id)
+        self.tbl.setCellWidget(row, self.col_purchase_price, item_cost_price)
+        self.tbl.setCellWidget(row, self.col_retail_price, item_retail_price)
         self.tbl.setCellWidget(row, self.col_remark, item_remark)
         self.tbl.setCellWidget(row, self.col_brand, item_brand)
         self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
-    def clearTbl(self):
+    def onClear(self):
         self.tbl.setRowCount(0)
 
-    def updateClass(self, code):
+    def updateCategory(self, code):
         item = self.focusWidget()
         if code == QDialog.DialogCode.Accepted:
-            item.setText(str(self.class_selector.class_id_selected))
+            item.setText(str(self.category_selector.category_id))
 
-    def doImport(self):
+    def onImport(self):
         if self.tbl.rowCount() == 0:
             return
 
         for row in range(self.tbl.rowCount()):
-            stock_id = int(self.tbl.item(row, self.col_sys_id).text())
+            id = int(self.tbl.item(row, self.col_id).text())
             barcode = self.tbl.item(row, self.col_barcode).text()
-            class_id = int(self.tbl.cellWidget(row, self.col_class_id).text())
-            stock_num = self.tbl.cellWidget(row, self.col_stock_num).value()
-            input_price = self.tbl.cellWidget(
-                row, self.col_input_price).value()
-            sale_price = self.tbl.cellWidget(row, self.col_sale_price).value()
+            category_id = int(self.tbl.cellWidget(
+                row, self.col_category_id).text())
+            num = self.tbl.cellWidget(row, self.col_num).value()
+            cost_price = self.tbl.cellWidget(
+                row, self.col_purchase_price).value()
+            retail_price = self.tbl.cellWidget(
+                row, self.col_retail_price).value()
+            name = self.tbl.cellWidget(row, self.col_name).text()
             remark = self.tbl.cellWidget(row, self.col_remark).text()
             brand = self.tbl.cellWidget(row, self.col_brand).text()
 
-            if stock_id == 0:
-                sql = f"""
-                    INSERT INTO {DB_INVERTORY}(barcode,num,saleprice,inputprice,classid,brand,remark)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s)
-                    """
-                self.cur.execute(
-                    sql, (barcode, stock_num, sale_price, input_price, class_id, brand, remark))
-            else:
-                sql = f"""
-                    UPDATE {DB_INVERTORY}
-                    SET num=%s, saleprice=%s, inputprice=%s, classid=%s, brand=%s, remark=%s
-                    WHERE id=%s
-                    """
-                self.cur.execute(
-                    sql, (stock_num, sale_price, input_price, class_id, brand, remark, stock_id))
+            data = {
+                'name': name,
+                'category_id': category_id,
+                'num': num,
+                'cost_price': cost_price,
+                'retail_price': retail_price,
+                'brand': brand,
+                'remark': remark
+            }
+            url = URL + '/goods/' + barcode
+            req_fn = requests.post if id == 0 else requests.put
+            resp = req_fn(url, data=data)
+            if resp.status_code != 200:
+                QMessageBox.critical(self, '严重', '入库失败')
+                return
 
-            print(row, self.cur.query)
-            if self.cur.rowcount != 1:
-                QMessageBox.critical(self, 'ERROR', 'stock import failed')
-                exit()
-
-        self.db.commit()
-        self.clearTbl()
-        QMessageBox.information(self, 'WELL', 'OK!')
-
-    def updateGoodsName(self, class_id):
-        self.cur.execute(
-            f"SELECT CONCAT(class0, class1, ext0, ext1, ext2, ext3, ext4) AS goodsname FROM {DB_CATEGORY} WHERE id=%s", (class_id,))
-        data = self.cur.fetchone()
-        item = self.sender().property('index')
-        item.setText(data[0])
+        self.onClear()
 
     def handleBarcode(self, barcode):
         if barcode == "":
-            QMessageBox.warning(self, 'WARNING', 'barcode null')
+            QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        sql = f"""
-            SELECT  s.id,
-                    s.barcode,
-                    CONCAT(c.class0, c.class1, c.ext0, c.ext1, c.ext2, c.ext3, c.ext4) AS goodsname,
-                    s.classid,
-                    s.num,
-                    CAST(s.inputprice AS DECIMAL(5, 2)),
-                    CAST(s.saleprice AS DECIMAL(5, 2)),
-                    s.remark,
-                    s.brand
-            FROM {DB_INVERTORY} AS s
-            LEFT JOIN {DB_CATEGORY} AS c ON s.classid = c.id
-            WHERE barcode='{barcode}'
-            """
-        self.cur.execute(sql)
-        data = self.cur.fetchone()
-        self.addRow(data, barcode)
+        resp = requests.get(URL + "/goods/" + barcode)
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '服务器异常')
+            return
+        self.addRow(resp.json(), barcode)
 
     def removeRow(self):
         btn = self.sender()
@@ -384,21 +339,19 @@ class StockWidget(QWidget):
 
 
 class SettleWidget(QWidget):
-    col_sys_id = 0
+    col_id = 0
     col_barcode = 1
-    col_goods_name = 2
-    col_sale_price = 3
+    col_name = 2
+    col_retail_price = 3
     col_num = 4
     col_price = 5
     col_op = 6
-    title = ["SYSID", "Barcode", "Goods Name",
-             "Sale Price", "Num", "Price", "..."]
+    title = ["ID", "条码", "商品名",
+             "零售价", "数量", "金额", "操作"]
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.db = DB_INST
-        self.cur = DB_INST.cursor()
         self.initUI()
 
     def eventFilter(self, obj, e):
@@ -413,14 +366,14 @@ class SettleWidget(QWidget):
 
         self.total_form = QFormLayout()
         self.total_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.total_form.addRow("Total Num:", QLabel(
+        self.total_form.addRow("总数量:", QLabel(
             "0", alignment=Qt.AlignmentFlag.AlignRight))
-        self.total_form.addRow("Total Price:", QLabel(
+        self.total_form.addRow("总价格:", QLabel(
             "0.00", alignment=Qt.AlignmentFlag.AlignRight))
-        btn_clear = QPushButton("Clear")
-        btn_settle = QPushButton("Settle")
-        btn_clear.clicked.connect(self.clearTbl)
-        btn_settle.clicked.connect(self.doSettle)
+        btn_clear = QPushButton("清空")
+        btn_settle = QPushButton("结算")
+        btn_clear.clicked.connect(self.onClear)
+        btn_settle.clicked.connect(self.onSettle)
         vbox = QVBoxLayout()
         vbox.addWidget(btn_clear)
         vbox.addStretch(1)
@@ -432,38 +385,37 @@ class SettleWidget(QWidget):
         self.setLayout(layout_grid)
 
     def addRow(self, data, barcode):
-        print('data:', data, barcode)
+        print(data)
 
         row = FindRow(barcode, self.tbl, self.col_barcode)
         if row != -1:
-            item_sale_price = self.tbl.item(row, self.col_sale_price)
+            item_retail_price = self.tbl.item(row, self.col_retail_price)
             item_price = self.tbl.item(row, self.col_price)
             item_num = self.tbl.cellWidget(row, self.col_num)
 
             item_num.setValue(item_num.value() + 1)
             item_price.setText(
-                format(float(item_price.text()) + float(item_sale_price.text()), ".2f"))
+                format(float(item_price.text()) + float(item_retail_price.text()), ".2f"))
         else:
             row = self.tbl.rowCount()
             self.tbl.setRowCount(row + 1)
+            item_id = QTableWidgetItem(str(data['id']))
+            item_id.setFlags(item_id.flags() & ~
+                             Qt.ItemFlag.ItemIsEditable)
 
-            item_sys_id = QTableWidgetItem(str(data[0]))
-            item_sys_id.setFlags(item_sys_id.flags() & ~
-                                 Qt.ItemFlag.ItemIsEditable)
-
-            item_barcode = QTableWidgetItem(data[1])
+            item_barcode = QTableWidgetItem(data['barcode'])
             item_barcode.setFlags(item_barcode.flags() &
                                   ~Qt.ItemFlag.ItemIsEditable)
 
-            item_goods_name = QTableWidgetItem(data[2])
-            item_goods_name.setFlags(
-                item_goods_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            item_name = QTableWidgetItem(data['name'])
+            item_name.setFlags(
+                item_name.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-            item_sale_price = QTableWidgetItem(str(data[3]))
-            item_sale_price.setFlags(
-                item_sale_price.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            item_retail_price = QTableWidgetItem(str(data['retail_price']))
+            item_retail_price.setFlags(
+                item_retail_price.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-            item_price = QTableWidgetItem(item_sale_price.text())
+            item_price = QTableWidgetItem(item_retail_price.text())
             item_price.setFlags(item_price.flags() & ~
                                 Qt.ItemFlag.ItemIsEditable)
 
@@ -474,10 +426,10 @@ class SettleWidget(QWidget):
             btn_remove = QPushButton('Remove')
             btn_remove.clicked.connect(self.removeRow)
 
-            self.tbl.setItem(row, self.col_sys_id, item_sys_id)
+            self.tbl.setItem(row, self.col_id, item_id)
             self.tbl.setItem(row, self.col_barcode, item_barcode)
-            self.tbl.setItem(row, self.col_goods_name, item_goods_name)
-            self.tbl.setItem(row, self.col_sale_price, item_sale_price)
+            self.tbl.setItem(row, self.col_name, item_name)
+            self.tbl.setItem(row, self.col_retail_price, item_retail_price)
             self.tbl.setItem(row, self.col_price, item_price)
             self.tbl.setCellWidget(row, self.col_num, item_num)
             self.tbl.setCellWidget(row, self.col_op, btn_remove)
@@ -489,7 +441,7 @@ class SettleWidget(QWidget):
         total_price = 0.00
         for i in range(self.tbl.rowCount()):
             item_num = self.tbl.cellWidget(i, self.col_num)
-            item_sale_price = self.tbl.item(i, self.col_sale_price)
+            item_sale_price = self.tbl.item(i, self.col_retail_price)
             item_price = self.tbl.item(i, self.col_price)
 
             price = item_num.value() * float(item_sale_price.text())
@@ -507,24 +459,18 @@ class SettleWidget(QWidget):
 
     def handleBarcode(self, barcode):
         if barcode == "":
-            QMessageBox.warning(self, 'WARNING', 'barcode null')
+            QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        sql = f'''
-            SELECT  s.id,
-                    s.barcode,
-                    CONCAT(c.class0, c.class1, c.ext0, c.ext1, c.ext2, c.ext3, c.ext4) AS goodsname,
-                    CAST(s.saleprice AS DECIMAL(5, 2))
-            FROM {DB_INVERTORY} AS s
-            LEFT JOIN {DB_CATEGORY} AS c ON s.classid = c.id
-            WHERE barcode='{barcode}'
-            '''
-        self.cur.execute(sql)
-        data = self.cur.fetchone()
-        if data:
-            self.addRow(data, barcode)
-        else:
-            QMessageBox.warning(self, 'WARNING', "barcode not found")
+        resp = requests.get(URL + "/goods/" + barcode)
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '服务器异常')
+            return
+        resp = resp.json()
+        if resp.get('errmsg'):
+            QMessageBox.warning(self, '警告', resp.get('errmsg'))
+            return
+        self.addRow(resp, barcode)
 
     def removeRow(self):
         btn = self.sender()
@@ -533,56 +479,28 @@ class SettleWidget(QWidget):
             self.tbl.removeRow(row)
         self.updateTotal()
 
-    def doSettle(self):
+    def onSettle(self):
         if self.tbl.rowCount() == 0:
             return
 
-        total_num_item = self.total_form.itemAt(
-            0, QFormLayout.FieldRole).widget()
-        total_price_item = self.total_form.itemAt(
-            1, QFormLayout.FieldRole).widget()
-        deduction = 0
-        payment = total_price_item.text()
-
-        sql = f"""
-            INSERT INTO {DB_ORDERS}(num,price,deduction,payment)
-            VALUES(%s,%s,%s,%s)
-            RETURNING id
-            """
-        self.cur.execute(sql, (total_num_item.text(),
-                         total_price_item.text(), deduction, payment))
-        if self.cur.rowcount != 1:
-            QMessageBox.critical(self, 'ERROR', 'order add failed')
-            exit()
-        last_id = self.cur.fetchone()[0]
-
+        post_data = []
         for row in range(self.tbl.rowCount()):
-            item_stock_id = self.tbl.item(row, self.col_sys_id)
-            item_price = self.tbl.item(row, self.col_price)
+            item_id = self.tbl.item(row, self.col_id)
+            item_retail_price = self.tbl.item(row, self.col_retail_price)
             item_num = self.tbl.cellWidget(row, self.col_num)
 
-            sql = f"""
-                INSERT INTO {DB_ORDERDETAIL}(stockid,num,price,orderid)
-                VALUES(%s,%s,%s,%s)
-                """
-            self.cur.execute(sql, (item_stock_id.text(), item_num.value(),
-                             item_price.text(), last_id))
-            if self.cur.rowcount != 1:
-                QMessageBox.critical(
-                    self, 'ERROR', 'order detail add failed')
-                exit()
+            post_data.append({
+                'id': item_id.text(),
+                'num': item_num.value(),
+                'retail_price': item_retail_price.text()
+            })
+        resp = requests.post(URL + "/settle", json=post_data)
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '结算后台异常')
+            return
+        self.onClear()
 
-            sql = f"UPDATE {DB_INVERTORY} SET num=num-%s WHERE id=%s"
-            self.cur.execute(sql, (item_num.value(), item_stock_id.text()))
-            if self.cur.rowcount != 1:
-                QMessageBox.critical(self, 'ERROR', 'stock update failed')
-                exit()
-
-        self.db.commit()
-        self.clearTbl()
-        QMessageBox.information(self, 'WELL', 'OK!')
-
-    def clearTbl(self):
+    def onClear(self):
         self.tbl.setRowCount(0)
         self.updateTotal()
 
@@ -605,24 +523,25 @@ class MainWidget(QWidget):
         return False
 
     def initUI(self):
-        self.tab = QTabWidget()
         settle_page = SettleWidget(self)
         stock_page = StockWidget(self)
         settle_page.installEventFilter(self)
         stock_page.installEventFilter(self)
-        self.tab.addTab(settle_page, 'SETTLE')
-        self.tab.addTab(stock_page, 'STOCK')
+
+        self.tab = QTabWidget()
+        self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
+        self.tab.addTab(settle_page, '结算')
+        self.tab.addTab(stock_page, '库存')
 
         layout = QGridLayout()
         layout.addWidget(self.tab, 0, 0, 1, 1)
         self.setLayout(layout)
 
-        self.setWindowTitle('STATIONERY v1.0')
+        self.setWindowTitle('收银系统 - 墨为文体用品店 V2.0')
         self.showMaximized()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    DB_INST = InitDB()
     main = MainWidget()
     sys.exit(app.exec_())
