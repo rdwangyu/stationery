@@ -1,29 +1,31 @@
 import sys
 from PyQt5.QtCore import QEvent
+from PyQt5.QtMultimedia import QSound
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 from PyQt5.QtGui import *
 import requests
 
-
-BARCODE = ""
-URL = 'http://127.0.0.1:8000/cli'
+Barcode = ""
+BaseUrl = 'http://127.0.0.1:8000/cli'
+Beep = None
+Resolution = QSize(1920, 1080)
 
 
 def DoKeyPressEvent(e, handle_barcode_cb):
-    global BARCODE
+    global Barcode
 
     keycode = e.key()
     if keycode == Qt.Key_Enter or keycode == Qt.Key_Return:
-        print("barcode:", BARCODE)
-        handle_barcode_cb(BARCODE)
-        BARCODE = ""
+        print("barcode:", Barcode)
+        handle_barcode_cb(Barcode)
+        Barcode = ""
     elif keycode not in [*range(48, 58), *range(65, 91), *range(97, 123)]:
         print('out of range:', keycode)
-        BARCODE = ""
+        Barcode = ""
     else:
-        BARCODE += chr(keycode)
+        Barcode += chr(keycode)
 
 
 def FindRow(kw, tbl, col):
@@ -60,7 +62,7 @@ class CategorySelector(QDialog):
         self.setLayout(vbox)
 
         self.setWindowTitle('分类')
-        self.resize(1920, 1080)
+        self.setFixedSize(Resolution / 2)
 
     def buildCategoryTree(self):
         self.category_tree.setHeaderHidden(True)
@@ -69,7 +71,7 @@ class CategorySelector(QDialog):
 
         temp = ['', '', '', '', '', '', '']
         root = self.model.invisibleRootItem()
-        resp = requests.get(URL + '/categories')
+        resp = requests.get(BaseUrl + '/categories')
         resp = resp.json()
         for i in range(len(resp)):
             data = resp[i]
@@ -173,7 +175,7 @@ class StockWidget(QWidget):
     def eventFilter(self, obj, e):
         if e.type() == QEvent.MouseButtonPress:
             if obj.objectName() == 'category_selector':
-                self.category_selector.open()
+                self.category_selector.show()
                 return True
         if e.type() == QEvent.FocusIn:
             if obj.objectName() == 'my_line_edit':
@@ -190,6 +192,7 @@ class StockWidget(QWidget):
         self.tbl.installEventFilter(self)
 
         self.category_selector = CategorySelector()
+        self.category_selector.setModal(True)
         self.category_selector.finished.connect(self.updateCategory)
 
         btn_clear = QPushButton('清理')
@@ -276,6 +279,8 @@ class StockWidget(QWidget):
         self.tbl.setCellWidget(row, self.col_brand, item_brand)
         self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
+        Beep.play()
+
     def onClear(self):
         self.tbl.setRowCount(0)
 
@@ -311,7 +316,7 @@ class StockWidget(QWidget):
                 'brand': brand,
                 'remark': remark
             }
-            url = URL + '/goods/' + barcode
+            url = BaseUrl + '/goods/' + barcode
             req_fn = requests.post if id == 0 else requests.put
             resp = req_fn(url, data=data)
             if resp.status_code != 200:
@@ -320,16 +325,16 @@ class StockWidget(QWidget):
 
         self.onClear()
 
-    def handleBarcode(self, barcode):
-        if barcode == "":
+    def handleInput(self, text):
+        if text == "":
             QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        resp = requests.get(URL + "/goods/" + barcode)
+        resp = requests.get(BaseUrl + "/goods/" + text)
         if resp.status_code != 200:
             QMessageBox.critical(self, '严重', '服务器异常')
             return
-        self.addRow(resp.json(), barcode)
+        self.addRow(resp.json(), text)
 
     def removeRow(self):
         btn = self.sender()
@@ -361,6 +366,7 @@ class SettleWidget(QWidget):
         self.tbl = QTableWidget()
         self.tbl.setColumnCount(len(self.title))
         self.tbl.setHorizontalHeaderLabels(self.title)
+        self.tbl.setAlternatingRowColors(True)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tbl.installEventFilter(self)
 
@@ -435,6 +441,7 @@ class SettleWidget(QWidget):
             self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
         self.updateTotal()
+        Beep.play()
 
     def updateTotal(self):
         total_num = 0
@@ -457,12 +464,12 @@ class SettleWidget(QWidget):
         total_num_item.setText(str(total_num))
         total_price_item.setText(format(total_price, ".2f"))
 
-    def handleBarcode(self, barcode):
-        if barcode == "":
+    def handleInput(self, text):
+        if text == "":
             QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        resp = requests.get(URL + "/goods/" + barcode)
+        resp = requests.get(BaseUrl + "/goods/" + text)
         if resp.status_code != 200:
             QMessageBox.critical(self, '严重', '服务器异常')
             return
@@ -470,7 +477,7 @@ class SettleWidget(QWidget):
         if resp.get('errmsg'):
             QMessageBox.warning(self, '警告', resp.get('errmsg'))
             return
-        self.addRow(resp, barcode)
+        self.addRow(resp, text)
 
     def removeRow(self):
         btn = self.sender()
@@ -494,15 +501,182 @@ class SettleWidget(QWidget):
                 'num': item_num.value(),
                 'retail_price': item_retail_price.text()
             })
-        resp = requests.post(URL + "/settle", json=post_data)
+        resp = requests.post(BaseUrl + "/settle", json=post_data)
         if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '结算后台异常')
+            QMessageBox.critical(self, '严重', '后台结算异常')
             return
+
         self.onClear()
+        Beep.play()
 
     def onClear(self):
         self.tbl.setRowCount(0)
         self.updateTotal()
+
+
+class BillDetailWidget(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.field_id = QLabel("")
+        self.field_sn = QLabel("")
+        self.field_num = QLabel("")
+        self.field_discount = QLabel("")
+        self.field_payable = QLabel("")
+        self.field_pay_platform = QLabel("")
+        self.field_created_time = QLabel("")
+
+        self.field_status = QComboBox()
+        self.field_status.addItems(['0', '1', '2', '3'])
+        self.field_status.currentTextChanged.connect(self.updateStatus)
+
+        formLayout = QFormLayout()
+        formLayout.addRow("ID", self.field_id)
+        formLayout.addRow("SN", self.field_sn)
+        formLayout.addRow("商品数", self.field_num)
+        formLayout.addRow("折扣", self.field_discount)
+        formLayout.addRow("应收", self.field_payable)
+        formLayout.addRow("支付平台", self.field_pay_platform)
+        formLayout.addRow("账单状态", self.field_status)
+        formLayout.addRow("创建日期", self.field_created_time)
+
+        btn_confirm = QPushButton('确定')
+        btn_confirm.clicked.connect(self.onConfirm)
+        vbox = QVBoxLayout()
+        vbox.addLayout(formLayout)
+        vbox.addWidget(btn_confirm)
+        self.setLayout(vbox)
+
+        self.setWindowTitle('账单详情')
+        self.setFixedSize(Resolution / 2)
+
+    def onConfirm(self, checked):
+        self.accept()
+
+    def updateStatus(self, text):
+        status = int(text)
+        resp = requests.put(BaseUrl + '/bills/' +
+                            self.field_id.text(), data={'status': status})
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '状态更新异常')
+            return
+
+    def loadData(self, id):
+        resp = requests.get(BaseUrl + '/bills/' + str(id))
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '后台异常')
+            return
+        data = resp.json()
+        if data.get('errmsg'):
+            QMessageBox.critical(self, '严重', data['errmsg'])
+            return
+        self.field_id.setText(str(data['id']))
+        self.field_sn.setText(str(data['sn']))
+        self.field_num.setText(str(data['num']))
+        self.field_discount.setText(str(data['discount']))
+        self.field_payable.setText(str(data['payable']))
+        self.field_pay_platform.setText(str(data['pay_platform']))
+        self.field_status.setCurrentText(str(data['status']))
+        self.field_created_time.setText(str(data['created_time']))
+
+
+class BillWidget(QWidget):
+    col_id = 0
+    col_sn = 1
+    col_num = 2
+    col_discount = 3
+    col_payable = 4
+    col_platform = 5
+    col_status = 6
+    col_created_time = 7
+    title = ["ID", "SN", "商品数", "折扣", "应收", "支付平台", "账单状态", "创建日期"]
+
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        self.loadData()
+
+    def handleInput(self, text):
+        return
+
+    def initUI(self):
+        self.tbl = QTableWidget()
+        self.tbl.setColumnCount(len(self.title))
+        self.tbl.setHorizontalHeaderLabels(self.title)
+        self.tbl.setAlternatingRowColors(True)
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tbl.itemClicked.connect(self.onItemClicked)
+
+        self.detail_page = BillDetailWidget()
+        self.detail_page.setModal(True)
+        self.detail_page.finished.connect(self.loadData)
+
+        btn_refresh = QPushButton("刷新")
+        btn_refresh.clicked.connect(self.loadData)
+        vbox = QVBoxLayout()
+        vbox.addWidget(btn_refresh)
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.tbl)
+        hbox.addWidget(btn_refresh)
+        self.setLayout(hbox)
+
+    def onItemClicked(self, item):
+        if item.column() == self.col_id:
+            self.detail_page.loadData(int(item.text()))
+            self.detail_page.show()
+
+    def loadData(self):
+        self.tbl.setRowCount(0)
+
+        resp = requests.get(BaseUrl + '/bills')
+        data = resp.json()
+        rowCount = len(data)
+
+        self.tbl.setRowCount(rowCount)
+        for row in range(rowCount):
+            item_id = QTableWidgetItem(str(data[row]['id']))
+            item_id.setFlags(item_id.flags() & ~
+                             Qt.ItemFlag.ItemIsEditable)
+
+            item_sn = QTableWidgetItem(data[row]['sn'])
+            item_sn.setFlags(item_id.flags() & ~
+                             Qt.ItemFlag.ItemIsEditable)
+
+            item_num = QTableWidgetItem(str(data[row]['num']))
+            item_num.setFlags(item_id.flags() & ~
+                              Qt.ItemFlag.ItemIsEditable)
+
+            item_discount = QTableWidgetItem(str(data[row]['discount']))
+            item_discount.setFlags(item_id.flags() & ~
+                                   Qt.ItemFlag.ItemIsEditable)
+
+            item_payable = QTableWidgetItem(str(data[row]['payable']))
+            item_payable.setFlags(item_id.flags() & ~
+                                  Qt.ItemFlag.ItemIsEditable)
+
+            item_pay_platform = QTableWidgetItem(
+                str(data[row]['pay_platform']))
+            item_pay_platform.setFlags(item_id.flags() & ~
+                                       Qt.ItemFlag.ItemIsEditable)
+
+            item_status = QTableWidgetItem(str(data[row]['status']))
+            item_status.setFlags(item_id.flags() & ~
+                                 Qt.ItemFlag.ItemIsEditable)
+
+            item_created_time = QTableWidgetItem(data[row]['created_time'])
+            item_created_time.setFlags(item_id.flags() & ~
+                                       Qt.ItemFlag.ItemIsEditable)
+
+            self.tbl.setItem(row, self.col_id, item_id)
+            self.tbl.setItem(row, self.col_sn, item_sn)
+            self.tbl.setItem(row, self.col_num, item_num)
+            self.tbl.setItem(row, self.col_discount, item_discount)
+            self.tbl.setItem(row, self.col_payable, item_payable)
+            self.tbl.setItem(row, self.col_platform, item_pay_platform)
+            self.tbl.setItem(row, self.col_status, item_status)
+            self.tbl.setItem(row, self.col_created_time, item_created_time)
 
 
 class MainWidget(QWidget):
@@ -511,10 +685,15 @@ class MainWidget(QWidget):
         self.installEventFilter(self)
         self.initUI()
 
+        shortcut_quit = QShortcut(QKeySequence('Alt+Q'), self)
+        shortcut_quit.activated.connect(self.onQuit)
+
+        Beep = QSound('./dong.wav', self)
+
     def eventFilter(self, obj, e):
         if e.type() == QEvent.KeyPress:
             if not isinstance(obj, (QSpinBox, QDoubleSpinBox)):
-                DoKeyPressEvent(e, self.tab.currentWidget().handleBarcode)
+                DoKeyPressEvent(e, self.tab.currentWidget().handleInput)
                 return True
             else:
                 if e.key() == Qt.Key_Enter or e.key() == Qt.Key_Return:
@@ -524,24 +703,33 @@ class MainWidget(QWidget):
 
     def initUI(self):
         settle_page = SettleWidget(self)
-        stock_page = StockWidget(self)
         settle_page.installEventFilter(self)
+        stock_page = StockWidget(self)
         stock_page.installEventFilter(self)
+        bill_page = BillWidget()
 
         self.tab = QTabWidget()
         self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
         self.tab.addTab(settle_page, '结算')
         self.tab.addTab(stock_page, '库存')
+        self.tab.addTab(bill_page, '订单')
 
         layout = QGridLayout()
         layout.addWidget(self.tab, 0, 0, 1, 1)
         self.setLayout(layout)
 
         self.setWindowTitle('收银系统 - 墨为文体用品店 V2.0')
-        self.showMaximized()
+        self.showFullScreen()
+
+    def onQuit(self):
+        qApp.quit()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    Resolution = QSize(app.desktop().width(), app.desktop().height())
+    print('screen resolution: ', Resolution)
+
     main = MainWidget()
+
     sys.exit(app.exec_())
