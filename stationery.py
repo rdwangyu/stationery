@@ -140,8 +140,11 @@ class CategorySelector(QDialog):
                 ext_4.setFlags(ext_4.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_4.setData(id, Qt.ItemDataRole.UserRole)
 
-    def onConfirm(self, index):
-        item = self.model.itemFromIndex(index)
+    def onConfirm(self, checked):
+        index = self.category_tree.selectedIndexes()
+        if len(index) == 0:
+            return
+        item = self.model.itemFromIndex(index[0])
         if item.hasChildren():
             return
         self.category_id = item.data(Qt.ItemDataRole.UserRole)
@@ -456,13 +459,13 @@ class SettleWidget(QWidget):
             total_num += item_num.value()
             total_price += float(price)
 
-        total_num_item = self.total_form.itemAt(
+        item_total_num = self.total_form.itemAt(
             0, QFormLayout.FieldRole).widget()
-        total_price_item = self.total_form.itemAt(
+        item_total_price = self.total_form.itemAt(
             1, QFormLayout.FieldRole).widget()
 
-        total_num_item.setText(str(total_num))
-        total_price_item.setText(format(total_price, ".2f"))
+        item_total_num.setText(str(total_num))
+        item_total_price.setText(format(total_price, ".2f"))
 
     def handleInput(self, text):
         if text == "":
@@ -542,15 +545,21 @@ class BillDetailWidget(QDialog):
         formLayout.addRow("账单状态", self.field_status)
         formLayout.addRow("创建日期", self.field_created_time)
 
+        self.tbl = QTableView()
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tbl.verticalHeader().setDefaultSectionSize(300)
+        self.tbl.setAlternatingRowColors(True)
+
         btn_confirm = QPushButton('确定')
         btn_confirm.clicked.connect(self.onConfirm)
         vbox = QVBoxLayout()
         vbox.addLayout(formLayout)
+        vbox.addWidget(self.tbl)
         vbox.addWidget(btn_confirm)
         self.setLayout(vbox)
 
         self.setWindowTitle('账单详情')
-        self.setFixedSize(Resolution / 2)
+        self.setFixedSize(Resolution * 0.8)
 
     def onConfirm(self, checked):
         self.accept()
@@ -569,17 +578,46 @@ class BillDetailWidget(QDialog):
             QMessageBox.critical(self, '严重', '后台异常')
             return
         data = resp.json()
-        if data.get('errmsg'):
+        if isinstance(data, dict):
             QMessageBox.critical(self, '严重', data['errmsg'])
             return
-        self.field_id.setText(str(data['id']))
-        self.field_sn.setText(str(data['sn']))
-        self.field_num.setText(str(data['num']))
-        self.field_discount.setText(str(data['discount']))
-        self.field_payable.setText(str(data['payable']))
-        self.field_pay_platform.setText(str(data['pay_platform']))
-        self.field_status.setCurrentText(str(data['status']))
-        self.field_created_time.setText(str(data['created_time']))
+
+        bill = data[0]['bill']
+        self.field_id.setText(str(bill['id']))
+        self.field_sn.setText(str(bill['sn']))
+        self.field_num.setText(str(bill['num']))
+        self.field_discount.setText(str(bill['discount']))
+        self.field_payable.setText(str(bill['payable']))
+        self.field_pay_platform.setText(str(bill['pay_platform']))
+        self.field_status.setCurrentText(str(bill['status']))
+        self.field_created_time.setText(str(bill['created_time']))
+
+        model = QStandardItemModel()
+        for i in range(len(data)):
+            goods = data[i]
+            goods_detail = goods['goods']
+
+            item_name = QStandardItem(goods_detail['name'])
+            item_barcode = QStandardItem(goods_detail['barcode'])
+            item_num = QStandardItem(str(goods['num']))
+
+            img_url = goods_detail['thumbnail'][0]
+            resp = requests.get(img_url)
+            if resp.status_code != 200:
+                QMessageBox.critical(self, '严重', '商品图片加载异常' + img_url)
+                break
+            img = QPixmap()
+            img.loadFromData(resp.content)
+            img = img.scaled(300, 300)
+
+            item_img = QStandardItem()
+            item_img.setData(img, Qt.ItemDataRole.DecorationRole)
+            model.setItem(i, 0, item_img)
+            model.setItem(i, 1, item_barcode)
+            model.setItem(i, 2, item_name)
+            model.setItem(i, 3, item_num)
+
+        self.tbl.setModel(model)
 
 
 class BillWidget(QWidget):
@@ -613,14 +651,32 @@ class BillWidget(QWidget):
         self.detail_page.setModal(True)
         self.detail_page.finished.connect(self.loadData)
 
+        self.stat_form = QFormLayout()
+        self.stat_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.stat_form.addRow("季收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+        self.stat_form.addRow("月收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+        self.stat_form.addRow("本周收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+        self.stat_form.addRow("上周收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+        self.stat_form.addRow("日收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+
         btn_refresh = QPushButton("刷新")
         btn_refresh.clicked.connect(self.loadData)
+
         vbox = QVBoxLayout()
         vbox.addWidget(btn_refresh)
-        hbox = QHBoxLayout()
-        hbox.addWidget(self.tbl)
-        hbox.addWidget(btn_refresh)
-        self.setLayout(hbox)
+        vbox.addStretch(1)
+        vbox.addLayout(self.stat_form)
+
+        layout_grid = QGridLayout()
+        layout_grid.addWidget(self.tbl, 0, 0, 1, 1)
+        layout_grid.addLayout(vbox, 0, 1, 1, 1)
+
+        self.setLayout(layout_grid)
 
     def onItemClicked(self, item):
         if item.column() == self.col_id:
@@ -631,6 +687,9 @@ class BillWidget(QWidget):
         self.tbl.setRowCount(0)
 
         resp = requests.get(BaseUrl + '/bills')
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '后台异常, 帐单列表加载失败')
+            return
         data = resp.json()
         rowCount = len(data)
 
@@ -678,6 +737,27 @@ class BillWidget(QWidget):
             self.tbl.setItem(row, self.col_status, item_status)
             self.tbl.setItem(row, self.col_created_time, item_created_time)
 
+        resp = requests.get(BaseUrl + '/bills/stat')
+        if resp.status_code != 200:
+            QMessageBox.critical(self, '严重', '获取统计信息失败, 后台异常')
+            return
+        data = resp.json()
+        item_total_today = self.stat_form.itemAt(
+            0, QFormLayout.FieldRole).widget()
+        item_total_this_week = self.stat_form.itemAt(
+            1, QFormLayout.FieldRole).widget()
+        item_total_last_week = self.stat_form.itemAt(
+            2, QFormLayout.FieldRole).widget()
+        item_total_this_month = self.stat_form.itemAt(
+            3, QFormLayout.FieldRole).widget()
+        item_total_this_quarter = self.stat_form.itemAt(
+            4, QFormLayout.FieldRole).widget()
+        item_total_today.setText(str(data['today']))
+        item_total_this_week.setText(str(data['this_week']))
+        item_total_last_week.setText(str(data['last_week']))
+        item_total_this_month.setText(str(data['this_month']))
+        item_total_this_quarter.setText(str(data['this_quarter']))
+
 
 class MainWidget(QWidget):
     def __init__(self):
@@ -687,8 +767,6 @@ class MainWidget(QWidget):
 
         shortcut_quit = QShortcut(QKeySequence('Alt+Q'), self)
         shortcut_quit.activated.connect(self.onQuit)
-
-        Beep = QSound('./dong.wav', self)
 
     def eventFilter(self, obj, e):
         if e.type() == QEvent.KeyPress:
@@ -710,9 +788,9 @@ class MainWidget(QWidget):
 
         self.tab = QTabWidget()
         self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
+        self.tab.addTab(bill_page, '订单')
         self.tab.addTab(settle_page, '结算')
         self.tab.addTab(stock_page, '库存')
-        self.tab.addTab(bill_page, '订单')
 
         layout = QGridLayout()
         layout.addWidget(self.tab, 0, 0, 1, 1)
@@ -730,6 +808,7 @@ if __name__ == "__main__":
     Resolution = QSize(app.desktop().width(), app.desktop().height())
     print('screen resolution: ', Resolution)
 
+    Beep = QSound('./dong.wav', app)
     main = MainWidget()
 
     sys.exit(app.exec_())
