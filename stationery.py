@@ -8,7 +8,8 @@ from PyQt5.QtGui import *
 import requests
 
 Barcode = ""
-BaseUrl = 'http://127.0.0.1:8000/cli'
+BaseUrl = 'http://moreway.shop/cli'
+# BaseUrl = 'http://127.0.0.1:8000/cli'
 Beep = None
 Resolution = QSize(1920, 1080)
 
@@ -657,9 +658,9 @@ class BillWidget(QWidget):
             "0.00", alignment=Qt.AlignmentFlag.AlignRight))
         self.stat_form.addRow("月收益:", QLabel(
             "0.00", alignment=Qt.AlignmentFlag.AlignRight))
-        self.stat_form.addRow("本周收益:", QLabel(
-            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
         self.stat_form.addRow("上周收益:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+        self.stat_form.addRow("本周收益:", QLabel(
             "0.00", alignment=Qt.AlignmentFlag.AlignRight))
         self.stat_form.addRow("日收益:", QLabel(
             "0.00", alignment=Qt.AlignmentFlag.AlignRight))
@@ -742,15 +743,15 @@ class BillWidget(QWidget):
             QMessageBox.critical(self, '严重', '获取统计信息失败, 后台异常')
             return
         data = resp.json()
-        item_total_today = self.stat_form.itemAt(
+        item_total_this_quarter = self.stat_form.itemAt(
             0, QFormLayout.FieldRole).widget()
-        item_total_this_week = self.stat_form.itemAt(
+        item_total_this_month = self.stat_form.itemAt(
             1, QFormLayout.FieldRole).widget()
         item_total_last_week = self.stat_form.itemAt(
             2, QFormLayout.FieldRole).widget()
-        item_total_this_month = self.stat_form.itemAt(
+        item_total_this_week = self.stat_form.itemAt(
             3, QFormLayout.FieldRole).widget()
-        item_total_this_quarter = self.stat_form.itemAt(
+        item_total_today = self.stat_form.itemAt(
             4, QFormLayout.FieldRole).widget()
         item_total_today.setText(str(data['today']))
         item_total_this_week.setText(str(data['this_week']))
@@ -788,9 +789,9 @@ class MainWidget(QWidget):
 
         self.tab = QTabWidget()
         self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
-        self.tab.addTab(bill_page, '订单')
         self.tab.addTab(settle_page, '结算')
         self.tab.addTab(stock_page, '库存')
+        self.tab.addTab(bill_page, '订单')
 
         layout = QGridLayout()
         layout.addWidget(self.tab, 0, 0, 1, 1)
