@@ -6,12 +6,30 @@ from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 from PyQt5.QtGui import *
 import requests
+import json
+from datetime import datetime
 
 Barcode = ""
-BaseUrl = 'http://moreway.shop/cli'
+BaseUrl = 'https://moreway.shop/cli'
 # BaseUrl = 'http://127.0.0.1:8000/cli'
 Beep = None
 Resolution = QSize(1920, 1080)
+
+
+def RequestData(url, method='GET', data=None, is_img=False, err_msg='服务器异常'):
+    start_time = datetime.now()
+    resp = requests.request(
+        url=BaseUrl + url,
+        json=data,
+        method=method
+    )
+    end_time = datetime.now()
+    duration = end_time - start_time
+    print(url, method, duration, data)
+    if resp.status_code != 200:
+        QMessageBox.critical(None, '严重', err_msg)
+        return None, False
+    return resp.json() if not is_img else resp.content, True
 
 
 def DoKeyPressEvent(e, handle_barcode_cb):
@@ -72,72 +90,75 @@ class CategorySelector(QDialog):
 
         temp = ['', '', '', '', '', '', '']
         root = self.model.invisibleRootItem()
-        resp = requests.get(BaseUrl + '/categories')
-        resp = resp.json()
-        for i in range(len(resp)):
-            data = resp[i]
-            id = data['id']
-            if ''.join(temp[0:1]) != data['class_0']:
-                class_0 = QStandardItem(data['class_0'])
+
+        data, success = RequestData('/categories')
+        if not success:
+            return
+
+        for i in range(len(data)):
+            item = data[i]
+            id = item['id']
+            if ''.join(temp[0:1]) != item['class_0']:
+                class_0 = QStandardItem(item['class_0'])
                 class_0.setEditable(False)
                 root.appendRow(class_0)
-                temp[0] = data['class_0']
+                temp[0] = item['class_0']
                 temp[1:] = [''] * 6
 
-            if ''.join(temp[0:2]) != data['class_0'] + data['class_1']:
-                class_1 = QStandardItem(data['class_1'])
+            if ''.join(temp[0:2]) != item['class_0'] + item['class_1']:
+                class_1 = QStandardItem(item['class_1'])
                 class_0.appendRow(class_1)
-                temp[1] = data['class_1']
+                temp[1] = item['class_1']
                 temp[2:] = [''] * 5
 
-            if len(data['ext_0']) == 0:
+            if len(item['ext_0']) == 0:
                 class_1.setFlags(class_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 class_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:3]) != data['class_0'] + data['class_1'] + data['ext_0']:
-                ext_0 = QStandardItem(data['ext_0'])
+            if ''.join(temp[0:3]) != item['class_0'] + item['class_1'] + item['ext_0']:
+                ext_0 = QStandardItem(item['ext_0'])
                 class_1.appendRow(ext_0)
-                temp[2] = data['ext_0']
+                temp[2] = item['ext_0']
                 temp[3:] = [''] * 4
 
-            if len(data['ext_1']) == 0:
+            if len(item['ext_1']) == 0:
                 ext_0.setFlags(ext_0.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_0.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:4]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1']:
-                ext_1 = QStandardItem(data['ext_1'])
+            if ''.join(temp[0:4]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1']:
+                ext_1 = QStandardItem(item['ext_1'])
                 ext_0.appendRow(ext_1)
-                temp[3] = data['ext_1']
+                temp[3] = item['ext_1']
                 temp[4:] = [''] * 3
 
-            if len(data['ext_2']) == 0:
+            if len(item['ext_2']) == 0:
                 ext_1.setFlags(ext_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:5]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2']:
-                ext_2 = QStandardItem(data['ext_2'])
+            if ''.join(temp[0:5]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2']:
+                ext_2 = QStandardItem(item['ext_2'])
                 ext_1.appendRow(ext_2)
-                temp[4] = data['ext_2']
+                temp[4] = item['ext_2']
                 temp[5:] = [''] * 2
 
-            if len(data['ext_3']) == 0:
+            if len(item['ext_3']) == 0:
                 ext_2.setFlags(ext_2.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_2.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:6]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2'] + data['ext_3']:
-                ext_3 = QStandardItem(data['ext_3'])
+            if ''.join(temp[0:6]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3']:
+                ext_3 = QStandardItem(item['ext_3'])
                 ext_2.appendRow(ext_3)
-                temp[5] = data['ext_3']
+                temp[5] = item['ext_3']
                 temp[6] = ''
 
-            if len(data['ext_4']) == 0:
+            if len(item['ext_4']) == 0:
                 ext_3.setFlags(ext_3.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_3.setData(id, Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:7]) != data['class_0'] + data['class_1'] + data['ext_0'] + data['ext_1'] + data['ext_2'] + data['ext_3'] + data['ext_4']:
-                ext_4 = QStandardItem(data['ext_4'])
+            if ''.join(temp[0:7]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3'] + item['ext_4']:
+                ext_4 = QStandardItem(item['ext_4'])
                 ext_3.appendRow(ext_4)
-                temp[6] = data['ext_4']
+                temp[6] = item['ext_4']
                 ext_4.setFlags(ext_4.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_4.setData(id, Qt.ItemDataRole.UserRole)
 
@@ -320,12 +341,13 @@ class StockWidget(QWidget):
                 'brand': brand,
                 'remark': remark
             }
-            url = BaseUrl + '/goods/' + barcode
-            req_fn = requests.post if id == 0 else requests.put
-            resp = req_fn(url, data=data)
-            if resp.status_code != 200:
-                QMessageBox.critical(self, '严重', '入库失败')
+            url = '/goods/' + barcode
+            method = 'POST' if id == 0 else 'PUT'
+            resp, success = RequestData(url, method, data, '入库失败, 系统异常')
+            if not success:
                 return
+            if resp.get('errmsg'):
+                QMessageBox.warning(self, '警告', resp['errmsg'])
 
         self.onClear()
 
@@ -334,11 +356,10 @@ class StockWidget(QWidget):
             QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        resp = requests.get(BaseUrl + "/goods/" + text)
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '服务器异常')
+        data, success = RequestData("/goods/" + text)
+        if not success:
             return
-        self.addRow(resp.json(), text)
+        self.addRow(data, text)
 
     def removeRow(self):
         btn = self.sender()
@@ -473,11 +494,7 @@ class SettleWidget(QWidget):
             QMessageBox.warning(self, '警告', '未识别到条码')
             return
 
-        resp = requests.get(BaseUrl + "/goods/" + text)
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '服务器异常')
-            return
-        resp = resp.json()
+        resp, success = RequestData("/goods/" + text)
         if resp.get('errmsg'):
             QMessageBox.warning(self, '警告', resp.get('errmsg'))
             return
@@ -505,9 +522,8 @@ class SettleWidget(QWidget):
                 'num': item_num.value(),
                 'retail_price': item_retail_price.text()
             })
-        resp = requests.post(BaseUrl + "/settle", json=post_data)
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '后台结算异常')
+        resp, success = RequestData("/settle", 'POST', post_data, '后台结算异常')
+        if not success:
             return
 
         self.onClear()
@@ -567,18 +583,15 @@ class BillDetailWidget(QDialog):
 
     def updateStatus(self, text):
         status = int(text)
-        resp = requests.put(BaseUrl + '/bills/' +
-                            self.field_id.text(), data={'status': status})
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '状态更新异常')
+        url = '/bills/' + self.field_id.text()
+
+        resp, success = RequestData(
+            url, 'PUT', data={'status': status}, err_msg='状态更新异常')
+        if not success:
             return
 
     def loadData(self, id):
-        resp = requests.get(BaseUrl + '/bills/' + str(id))
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '后台异常')
-            return
-        data = resp.json()
+        data = RequestData('/bills/' + str(id))
         if isinstance(data, dict):
             QMessageBox.critical(self, '严重', data['errmsg'])
             return
@@ -603,12 +616,12 @@ class BillDetailWidget(QDialog):
             item_num = QStandardItem(str(goods['num']))
 
             img_url = goods_detail['thumbnail'][0]
-            resp = requests.get(img_url)
-            if resp.status_code != 200:
-                QMessageBox.critical(self, '严重', '商品图片加载异常' + img_url)
-                break
+            data, success = RequestData(
+                img_url, is_img=True, err_msg='商品图片加载异常' + img_url)
+            if not success:
+                return
             img = QPixmap()
-            img.loadFromData(resp.content)
+            img.loadFromData(data)
             img = img.scaled(300, 300)
 
             item_img = QStandardItem()
@@ -687,11 +700,9 @@ class BillWidget(QWidget):
     def loadData(self):
         self.tbl.setRowCount(0)
 
-        resp = requests.get(BaseUrl + '/bills')
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '后台异常, 帐单列表加载失败')
+        data, success = RequestData('/bills', err_msg='后台异常, 账单列表加载失败')
+        if not success:
             return
-        data = resp.json()
         rowCount = len(data)
 
         self.tbl.setRowCount(rowCount)
@@ -738,11 +749,9 @@ class BillWidget(QWidget):
             self.tbl.setItem(row, self.col_status, item_status)
             self.tbl.setItem(row, self.col_created_time, item_created_time)
 
-        resp = requests.get(BaseUrl + '/bills/stat')
-        if resp.status_code != 200:
-            QMessageBox.critical(self, '严重', '获取统计信息失败, 后台异常')
+        data, success = RequestData('/bills/stat', err_msg='获取统计信息失败, 后台异常')
+        if not success:
             return
-        data = resp.json()
         item_total_this_quarter = self.stat_form.itemAt(
             0, QFormLayout.FieldRole).widget()
         item_total_this_month = self.stat_form.itemAt(
@@ -807,7 +816,7 @@ class MainWidget(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     Resolution = QSize(app.desktop().width(), app.desktop().height())
-    print('screen resolution: ', Resolution)
+    print('Screen Resolution: ', Resolution)
 
     Beep = QSound('./dong.wav', app)
     main = MainWidget()
