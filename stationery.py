@@ -238,6 +238,7 @@ class StockWidget(QWidget):
         print(data)
 
         row = FindRow(barcode, self.tbl, self.col_barcode)
+        Beep.play()
         if row != -1:
             item = self.tbl.cellWidget(row, self.col_num)
             item.setValue(item.value() + 1)
@@ -304,8 +305,6 @@ class StockWidget(QWidget):
         self.tbl.setCellWidget(row, self.col_brand, item_brand)
         self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
-        Beep.play()
-
     def onClear(self):
         self.tbl.setRowCount(0)
 
@@ -349,6 +348,7 @@ class StockWidget(QWidget):
             if resp.get('errmsg'):
                 QMessageBox.warning(self, '警告', resp['errmsg'])
 
+        Beep.play()
         self.onClear()
 
     def handleInput(self, text):
