@@ -6,7 +6,6 @@ from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 from PyQt5.QtGui import *
 import requests
-import json
 from datetime import datetime
 
 Barcode = ""
