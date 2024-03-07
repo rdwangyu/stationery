@@ -7,6 +7,8 @@ from PyQt5.QtSql import *
 from PyQt5.QtGui import *
 import requests
 from datetime import datetime
+import xlrd
+import math
 
 Barcode = ""
 BaseUrl = 'https://moreway.shop/cli'
@@ -182,14 +184,22 @@ class StockWidget(QWidget):
     col_name = 2
     col_category_id = 3
     col_num = 4
-    col_purchase_price = 5
-    col_retail_price = 6
-    col_remark = 7
-    col_brand = 8
-    col_op = 9
+    col_add_num = 5
+    col_cost_price = 6
+    col_retail_price = 7
+    col_remark = 8
+    col_brand = 9
+    col_op = 10
 
-    title = ["ID", "条码", "商品名", "分类", "库存",
+    title = ["ID", "条码", "商品名", "分类", "库存", "新增",
              "成本", "售价", "备注", "品牌", "操作"]
+
+    brand_keywords = ['小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
+                      '千色坊', '文源', '宏翔', '常吉', '优佰', '掌握', '国誉',
+                      '派通', '百乐', '斑马',]
+
+    profit_ratio = 2.0
+    doc_col_idx = {'barcode': 0, 'name': 0, 'cost': 0, 'num': 0}
 
     def __init__(self, parent):
         super().__init__()
@@ -219,93 +229,179 @@ class StockWidget(QWidget):
         self.category_selector.setModal(True)
         self.category_selector.finished.connect(self.updateCategory)
 
+        self.total_form = QFormLayout()
+        self.total_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.total_form.addRow("新增数量:", QLabel(
+            "0", alignment=Qt.AlignmentFlag.AlignRight))
+        self.total_form.addRow("新增进价:", QLabel(
+            "0.00", alignment=Qt.AlignmentFlag.AlignRight))
+
         btn_clear = QPushButton('清理')
+        btn_clear.clicked.connect(self.onClear)
+        btn_read = QPushButton('文件批量入库')
+        btn_read.clicked.connect(self.onParseExcel)
         btn_import = QPushButton('入库')
+        btn_import.clicked.connect(self.onImport)
         vbox = QVBoxLayout()
         vbox.addWidget(btn_clear)
+        vbox.addWidget(btn_read)
         vbox.addStretch(1)
         vbox.addWidget(btn_import)
-        btn_clear.clicked.connect(self.onClear)
-        btn_import.clicked.connect(self.onImport)
+        vbox.addLayout(self.total_form)
 
         hbox = QHBoxLayout()
         hbox.addWidget(self.tbl)
         hbox.addLayout(vbox)
         self.setLayout(hbox)
 
+    def onParseExcel(self, checked):
+        file, filter = QFileDialog.getOpenFileName(
+            self, '选择库存单据', './', '*.xls *.xlsx')
+        if not file:
+            return
+        print('excel', file)
+        doc = xlrd.open_workbook(file)
+        sheet = doc.sheet_by_index(0)
+        title_row = 0
+        for col in range(sheet.ncols):
+            title_name = sheet.cell_value(title_row, col)
+            if title_name in self.doc_col_idx.keys():
+                self.doc_col_idx[title_name] = col
+        if sum(self.doc_col_idx.values()) == 0:
+            QMessageBox.warning(self, '警告', '库存单据字段未格式化')
+            return
+
+        start_row = 1
+        total_row = sheet.nrows - 1
+        for row in range(start_row, total_row):
+            barcode = sheet.cell_value(row, self.doc_col_idx['barcode'])
+            name = sheet.cell_value(row, self.doc_col_idx['name'])
+            add_num = int(sheet.cell_value(row, self.doc_col_idx['num']))
+            cost = sheet.cell_value(row, self.doc_col_idx['cost'])
+            brand = next(
+                (k for k in self.brand_keywords if name.find(k) != -1), '')
+
+            data, success = RequestData("/goods/" + barcode)
+            if not success:
+                return
+            if data.get('errmsg'):
+                data = {
+                    'add_num': add_num,
+                    'name': name,
+                    'cost_price': cost,
+                    'brand': brand,
+                    'retail_price': math.floor(cost * self.profit_ratio)
+                }
+            else:
+                data['name'] = name
+                data['add_num'] = add_num
+                data['cost_price'] = cost
+                data['brand'] = brand
+            self.addRow(data, barcode=barcode)
+
+    def updateTotal(self):
+        total_add_num = 0
+        total_add_price = 0.00
+        for i in range(self.tbl.rowCount()):
+            item_add_num = self.tbl.cellWidget(i, self.col_add_num)
+            item_cost_price = self.tbl.cellWidget(i, self.col_cost_price)
+
+            price = item_add_num.value() * float(item_cost_price.value())
+            total_add_num += item_add_num.value()
+            total_add_price += float(price)
+
+        item_total_add_num = self.total_form.itemAt(
+            0, QFormLayout.FieldRole).widget()
+        item_total_add_price = self.total_form.itemAt(
+            1, QFormLayout.FieldRole).widget()
+
+        item_total_add_num.setText(str(total_add_num))
+        item_total_add_price.setText(format(total_add_price, ".2f"))
+
     def addRow(self, data, barcode):
         print(data)
 
-        row = FindRow(barcode, self.tbl, self.col_barcode)
-        Beep.play()
-        if row != -1:
-            item = self.tbl.cellWidget(row, self.col_num)
-            item.setValue(item.value() + 1)
-            return
-
-        row = self.tbl.rowCount()
-        self.tbl.setRowCount(row + 1)
-
         id = data.get('id', 0)
         category = data.get('category', {'id': 1})
-        num = data.get('num', 1)
+        num = data.get('num', 0)
+        add_num = data.get('add_num', 1)
         name = data.get('name', '')
         remark = data.get('remark', '')
         brand = data.get('brand', '')
-        cost_price = data.get('cost_price', 0)
-        retail_price = data.get('retail_price', 0)
+        cost_price = data.get('cost_price', 0.0)
+        retail_price = data.get('retail_price', 0.0)
 
-        item_id = QTableWidgetItem(str(id))
-        item_id.setFlags(item_id.flags() & ~
-                         Qt.ItemFlag.ItemIsEditable)
+        row = FindRow(barcode, self.tbl, self.col_barcode)
+        if row != -1:
+            item = self.tbl.cellWidget(row, self.col_add_num)
+            item.setValue(item.value() + add_num)
+        else:
+            row = self.tbl.rowCount()
+            self.tbl.setRowCount(row + 1)
 
-        item_barcode = QTableWidgetItem(barcode)
-        item_barcode.setFlags(item_barcode.flags() & ~
+            item_id = QTableWidgetItem(str(id))
+            item_id.setFlags(item_id.flags() & ~
+                             Qt.ItemFlag.ItemIsEditable)
+
+            item_barcode = QTableWidgetItem(barcode)
+            item_barcode.setFlags(item_barcode.flags() & ~
+                                  Qt.ItemFlag.ItemIsEditable)
+
+            item_name = QLineEdit(name)
+
+            item_num = QTableWidgetItem(str(num))
+            item_num.setFlags(item_barcode.flags() & ~
                               Qt.ItemFlag.ItemIsEditable)
 
-        item_name = QLineEdit(name)
+            item_add_num = QSpinBox(objectName='my_line_edit')
+            item_add_num.setValue(add_num)
+            item_add_num.setMaximum(10000)
+            item_add_num.valueChanged.connect(self.updateTotal)
+            item_add_num.installEventFilter(self)
 
-        item_num = QSpinBox(objectName='my_line_edit')
-        item_num.setValue(num)
-        item_num.setMaximum(10000)
-        item_num.installEventFilter(self)
+            item_category_id = QLineEdit(objectName='category_selector')
+            item_category_id.setText(str(category['id']))
+            item_category_id.setProperty('index', item_name)
+            item_category_id.installEventFilter(self)
 
-        item_category_id = QLineEdit(objectName='category_selector')
-        item_category_id.setText(str(category['id']))
-        item_category_id.setProperty('index', item_name)
-        item_category_id.installEventFilter(self)
+            item_cost_price = QDoubleSpinBox(objectName='my_line_edit')
+            item_cost_price.setSingleStep(0.5)
+            item_cost_price.setMaximum(9999.99)
+            item_cost_price.setValue(float(cost_price))
+            item_cost_price.valueChanged.connect(self.updateTotal)
+            item_cost_price.installEventFilter(self)
 
-        item_cost_price = QDoubleSpinBox(objectName='my_line_edit')
-        item_cost_price.setSingleStep(0.5)
-        item_cost_price.setMaximum(9999.99)
-        item_cost_price.setValue(float(cost_price))
-        item_cost_price.installEventFilter(self)
+            item_retail_price = QDoubleSpinBox(objectName='my_line_edit')
+            item_retail_price.setSingleStep(0.5)
+            item_retail_price.setMaximum(9999.99)
+            item_retail_price.setValue(float(retail_price))
+            item_retail_price.installEventFilter(self)
 
-        item_retail_price = QDoubleSpinBox(objectName='my_line_edit')
-        item_retail_price.setSingleStep(0.5)
-        item_retail_price.setMaximum(9999.99)
-        item_retail_price.setValue(float(retail_price))
-        item_retail_price.installEventFilter(self)
+            item_remark = QLineEdit(remark)
+            item_brand = QLineEdit(brand)
 
-        item_remark = QLineEdit(remark)
-        item_brand = QLineEdit(brand)
+            btn_remove = QPushButton('移除')
+            btn_remove.clicked.connect(self.removeRow)
 
-        btn_remove = QPushButton('移除')
-        btn_remove.clicked.connect(self.removeRow)
+            self.tbl.setItem(row, self.col_id, item_id)
+            self.tbl.setItem(row, self.col_barcode, item_barcode)
+            self.tbl.setCellWidget(row, self.col_name, item_name)
+            self.tbl.setItem(row, self.col_num, item_num)
+            self.tbl.setCellWidget(row, self.col_add_num, item_add_num)
+            self.tbl.setCellWidget(row, self.col_category_id, item_category_id)
+            self.tbl.setCellWidget(row, self.col_cost_price, item_cost_price)
+            self.tbl.setCellWidget(
+                row, self.col_retail_price, item_retail_price)
+            self.tbl.setCellWidget(row, self.col_remark, item_remark)
+            self.tbl.setCellWidget(row, self.col_brand, item_brand)
+            self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
-        self.tbl.setItem(row, self.col_id, item_id)
-        self.tbl.setItem(row, self.col_barcode, item_barcode)
-        self.tbl.setCellWidget(row, self.col_name, item_name)
-        self.tbl.setCellWidget(row, self.col_num, item_num)
-        self.tbl.setCellWidget(row, self.col_category_id, item_category_id)
-        self.tbl.setCellWidget(row, self.col_purchase_price, item_cost_price)
-        self.tbl.setCellWidget(row, self.col_retail_price, item_retail_price)
-        self.tbl.setCellWidget(row, self.col_remark, item_remark)
-        self.tbl.setCellWidget(row, self.col_brand, item_brand)
-        self.tbl.setCellWidget(row, self.col_op, btn_remove)
+        self.updateTotal()
+        Beep.play()
 
     def onClear(self):
         self.tbl.setRowCount(0)
+        self.updateTotal()
 
     def updateCategory(self, code):
         item = self.focusWidget()
@@ -319,11 +415,12 @@ class StockWidget(QWidget):
         for row in range(self.tbl.rowCount()):
             id = int(self.tbl.item(row, self.col_id).text())
             barcode = self.tbl.item(row, self.col_barcode).text()
+            num = int(self.tbl.item(row, self.col_num).text())
             category_id = int(self.tbl.cellWidget(
                 row, self.col_category_id).text())
-            num = self.tbl.cellWidget(row, self.col_num).value()
+            add_num = self.tbl.cellWidget(row, self.col_add_num).value()
             cost_price = self.tbl.cellWidget(
-                row, self.col_purchase_price).value()
+                row, self.col_cost_price).value()
             retail_price = self.tbl.cellWidget(
                 row, self.col_retail_price).value()
             name = self.tbl.cellWidget(row, self.col_name).text()
@@ -333,7 +430,7 @@ class StockWidget(QWidget):
             data = {
                 'name': name,
                 'category_id': category_id,
-                'num': num,
+                'num': num + add_num,
                 'cost_price': cost_price,
                 'retail_price': retail_price,
                 'brand': brand,
@@ -341,7 +438,8 @@ class StockWidget(QWidget):
             }
             url = '/goods/' + barcode
             method = 'POST' if id == 0 else 'PUT'
-            resp, success = RequestData(url, method, data, err_msg='入库失败, 系统异常')
+            resp, success = RequestData(
+                url, method, data, err_msg='入库失败, 系统异常')
             if not success:
                 return
             if resp.get('errmsg'):
@@ -366,6 +464,7 @@ class StockWidget(QWidget):
         if btn:
             row = self.tbl.indexAt(btn.pos()).row()
             self.tbl.removeRow(row)
+        self.updateTotal()
 
 
 class SettleWidget(QWidget):
@@ -522,7 +621,8 @@ class SettleWidget(QWidget):
                 'num': item_num.value(),
                 'retail_price': item_retail_price.text()
             })
-        resp, success = RequestData("/settle", 'POST', post_data, err_msg='后台结算异常')
+        resp, success = RequestData(
+            "/settle", 'POST', post_data, err_msg='后台结算异常')
         if not success:
             return
         if resp.get('errmsg'):
@@ -801,8 +901,8 @@ class MainWidget(QWidget):
 
         self.tab = QTabWidget()
         self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
-        self.tab.addTab(settle_page, '结算')
         self.tab.addTab(stock_page, '库存')
+        self.tab.addTab(settle_page, '结算')
         self.tab.addTab(bill_page, '订单')
 
         layout = QGridLayout()
