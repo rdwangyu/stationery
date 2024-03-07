@@ -106,59 +106,59 @@ class CategorySelector(QDialog):
 
             if ''.join(temp[0:2]) != item['class_0'] + item['class_1']:
                 class_1 = QStandardItem(item['class_1'])
+                class_1.setEditable(False)
                 class_0.appendRow(class_1)
                 temp[1] = item['class_1']
                 temp[2:] = [''] * 5
 
             if len(item['ext_0']) == 0:
-                class_1.setFlags(class_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 class_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(temp[0:3]) != item['class_0'] + item['class_1'] + item['ext_0']:
                 ext_0 = QStandardItem(item['ext_0'])
+                ext_0.setEditable(False)
                 class_1.appendRow(ext_0)
                 temp[2] = item['ext_0']
                 temp[3:] = [''] * 4
 
             if len(item['ext_1']) == 0:
-                ext_0.setFlags(ext_0.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_0.setData(id, Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(temp[0:4]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1']:
                 ext_1 = QStandardItem(item['ext_1'])
+                ext_1.setEditable(False)
                 ext_0.appendRow(ext_1)
                 temp[3] = item['ext_1']
                 temp[4:] = [''] * 3
 
             if len(item['ext_2']) == 0:
-                ext_1.setFlags(ext_1.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_1.setData(id, Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(temp[0:5]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2']:
                 ext_2 = QStandardItem(item['ext_2'])
+                ext_2.setEditable(False)
                 ext_1.appendRow(ext_2)
                 temp[4] = item['ext_2']
                 temp[5:] = [''] * 2
 
             if len(item['ext_3']) == 0:
-                ext_2.setFlags(ext_2.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_2.setData(id, Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(temp[0:6]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3']:
                 ext_3 = QStandardItem(item['ext_3'])
+                ext_3.setEditable(False)
                 ext_2.appendRow(ext_3)
                 temp[5] = item['ext_3']
                 temp[6] = ''
 
             if len(item['ext_4']) == 0:
-                ext_3.setFlags(ext_3.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_3.setData(id, Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(temp[0:7]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3'] + item['ext_4']:
                 ext_4 = QStandardItem(item['ext_4'])
+                ext_4.setEditable(False)
                 ext_3.appendRow(ext_4)
                 temp[6] = item['ext_4']
-                ext_4.setFlags(ext_4.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 ext_4.setData(id, Qt.ItemDataRole.UserRole)
 
     def onConfirm(self, checked):
