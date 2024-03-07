@@ -341,11 +341,12 @@ class StockWidget(QWidget):
             }
             url = '/goods/' + barcode
             method = 'POST' if id == 0 else 'PUT'
-            resp, success = RequestData(url, method, data, '入库失败, 系统异常')
+            resp, success = RequestData(url, method, data, err_msg='入库失败, 系统异常')
             if not success:
                 return
             if resp.get('errmsg'):
                 QMessageBox.warning(self, '警告', resp['errmsg'])
+                return
 
         Beep.play()
         self.onClear()
@@ -521,8 +522,11 @@ class SettleWidget(QWidget):
                 'num': item_num.value(),
                 'retail_price': item_retail_price.text()
             })
-        resp, success = RequestData("/settle", 'POST', post_data, '后台结算异常')
+        resp, success = RequestData("/settle", 'POST', post_data, err_msg='后台结算异常')
         if not success:
+            return
+        if resp.get('errmsg'):
+            QMessageBox.warning(self, '警告', resp['errmsg'])
             return
 
         self.onClear()
