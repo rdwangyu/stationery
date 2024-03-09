@@ -9,12 +9,20 @@ import requests
 from datetime import datetime
 import xlrd
 import math
+import shutil
+import os
+from glob import glob
 
-Barcode = ""
+
 BaseUrl = 'https://moreway.shop'
 # BaseUrl = 'http://127.0.0.1:8000'
+ImageSavePath = 'C:/Users/wy/Desktop/moreway_proj/moreway_server/app1/static/app1'
+BaseImageUrl = BaseUrl + '/static/app1'
+DefaultPath = 'C:/Users/wy/Desktop'
+
 Beep = None
 Resolution = QSize(1920, 1080)
+Barcode = ""
 
 
 def RequestData(url, method='GET', data=None, err_msg='服务器异常'):
@@ -169,8 +177,9 @@ class CategorySelector(QDialog):
         item = self.model.itemFromIndex(index[0])
         if item.hasChildren():
             return
-        self.category_id = item.data(Qt.ItemDataRole.UserRole)[0]
-        self.category_name = item.data(Qt.ItemDataRole.UserRole)[1]
+        data = item.data(Qt.ItemDataRole.UserRole)
+        self.category_id = data[0]
+        self.category_name = data[1]
         self.accept()
 
     def onExpand(self, index):
@@ -191,10 +200,12 @@ class StockWidget(QWidget):
     col_poster = 9
     col_remark = 10
     col_brand = 11
-    col_op = 12
+    col_on_sale = 12
+    col_op = 13
 
     title = ["ID", "条码", "商品名", "分类", "库存", "新增",
-             "成本", "售价", "封面图", "海报图", "备注", "品牌", "操作"]
+             "成本", "售价", "封面图", "海报图",
+             "备注", "品牌", "是否上架", "操作"]
 
     brand_keywords = ['小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
                       '千色坊', '文源', '宏翔', '常吉', '优佰', '掌握', '国誉',
@@ -258,7 +269,7 @@ class StockWidget(QWidget):
 
     def onParseExcel(self, checked):
         file, filter = QFileDialog.getOpenFileName(
-            self, '选择库存单据', './', '*.xls *.xlsx')
+            self, '选择库存单据', DefaultPath, '*.xls *.xlsx')
         if not file:
             return
         print('excel', file)
@@ -326,7 +337,7 @@ class StockWidget(QWidget):
         id = data.get('id', 0)
         category = data.get('category', {'id': -1})
         num = data.get('num', 0)
-        add_num = data.get('add_num', 1)
+        add_num = data.get('add_num', 0)
         name = data.get('name', '')
         remark = data.get('remark', '')
         brand = data.get('brand', '')
@@ -334,6 +345,7 @@ class StockWidget(QWidget):
         poster = data.get('poster', [''])
         cost_price = data.get('cost_price', 0.0)
         retail_price = data.get('retail_price', 0.0)
+        on_sale = data.get('on_sale', False)
 
         row = FindRow(barcode, self.tbl, self.col_barcode)
         if row != -1:
@@ -359,7 +371,8 @@ class StockWidget(QWidget):
 
             item_add_num = QSpinBox(objectName='my_line_edit')
             item_add_num.setValue(add_num)
-            item_add_num.setMaximum(10000)
+            item_add_num.setMaximum(999)
+            item_add_num.setMinimum(-999)
             item_add_num.valueChanged.connect(self.updateTotal)
             item_add_num.installEventFilter(self)
 
@@ -381,10 +394,19 @@ class StockWidget(QWidget):
             item_retail_price.setValue(float(retail_price))
             item_retail_price.installEventFilter(self)
 
-            item_thumbnail = QLineEdit(';'.join(thumbnail))
+            item_thumbnail = QPushButton('选择封面')
+            btn_color = '#FF0000' if thumbnail[0] == '' else '#00FF00'
+            item_thumbnail.setStyleSheet(
+                'background-color: {}'.format(btn_color))
+            item_thumbnail.setProperty('data', thumbnail)
+            item_thumbnail.clicked.connect(self.onSelectThumbnail)
+
             item_poster = QLineEdit(';'.join(poster))
             item_remark = QLineEdit(remark)
             item_brand = QLineEdit(brand)
+
+            item_on_sale = QCheckBox()
+            item_on_sale.setChecked(on_sale)
 
             btn_remove = QPushButton('移除')
             btn_remove.clicked.connect(self.removeRow)
@@ -403,9 +425,33 @@ class StockWidget(QWidget):
             self.tbl.setCellWidget(row, self.col_remark, item_remark)
             self.tbl.setCellWidget(row, self.col_brand, item_brand)
             self.tbl.setCellWidget(row, self.col_op, btn_remove)
+            self.tbl.setCellWidget(row, self.col_on_sale, item_on_sale)
 
         self.updateTotal()
         Beep.play()
+
+    def onSelectThumbnail(self, checked):
+        item_thumbnail = self.sender()
+        barcode = self.tbl.item(self.tbl.indexAt(
+            item_thumbnail.pos()).row(), self.col_barcode).text()
+
+        files, filter = QFileDialog.getOpenFileNames(
+            self, '选择图片', DefaultPath, '*.jpg *.png')
+        file_cnt = len(files)
+        if file_cnt:
+            for file_to_del in glob(ImageSavePath + '/' + barcode + '_*'):
+                os.remove(file_to_del)
+
+        file_url_list = []
+        for i in range(file_cnt):
+            file = files[i]
+            file_name, file_ext = os.path.splitext(file)
+            file_name_with_barcode = barcode + '_' + str(i) + file_ext
+            shutil.move(file, ImageSavePath + '/' + file_name_with_barcode)
+            file_url_list.append(BaseImageUrl + '/' + file_name_with_barcode)
+
+        item_thumbnail.setProperty('data', file_url_list)
+        item_thumbnail.setStyleSheet('background-color: #00FF00')
 
     def onClear(self):
         self.tbl.setRowCount(0)
@@ -438,11 +484,13 @@ class StockWidget(QWidget):
                 row, self.col_cost_price).value()
             retail_price = self.tbl.cellWidget(
                 row, self.col_retail_price).value()
-            thumbnail = self.tbl.cellWidget(row, self.col_thumbnail).text()
+            thumbnail = self.tbl.cellWidget(
+                row, self.col_thumbnail).property('data')
             poster = self.tbl.cellWidget(row, self.col_poster).text()
             name = self.tbl.cellWidget(row, self.col_name).text()
             remark = self.tbl.cellWidget(row, self.col_remark).text()
             brand = self.tbl.cellWidget(row, self.col_brand).text()
+            on_sale = self.tbl.cellWidget(row, self.col_on_sale).isChecked()
 
             data = {
                 'name': name,
@@ -453,7 +501,8 @@ class StockWidget(QWidget):
                 'brand': brand,
                 'remark': remark,
                 'thumbnail': thumbnail,
-                'poster': poster
+                'poster': poster,
+                'on_sale': on_sale
             }
             resp, success = RequestData(
                 BaseUrl + '/cli/goods/' + barcode,
@@ -464,8 +513,8 @@ class StockWidget(QWidget):
             if not success:
                 return
             data = resp.json()
-            if resp.get('errmsg'):
-                QMessageBox.warning(self, '警告', resp['errmsg'])
+            if data.get('errmsg'):
+                QMessageBox.warning(self, '警告', data['errmsg'])
                 return
 
         Beep.play()
@@ -504,6 +553,9 @@ class SettleWidget(QWidget):
         super().__init__()
         self.parent = parent
         self.initUI()
+ 
+        shortcut_settle = QShortcut(QKeySequence('Alt+E'), self)
+        shortcut_settle.activated.connect(self.onSettle)
 
     def eventFilter(self, obj, e):
         return self.parent.eventFilter(obj, e)
@@ -620,7 +672,7 @@ class SettleWidget(QWidget):
             return
         data = resp.json()
         if data.get('errmsg'):
-            QMessageBox.warning(self, '警告', resp.get('errmsg'))
+            QMessageBox.warning(self, '警告', data['errmsg'])
             return
         self.addRow(data, text)
 
@@ -751,10 +803,10 @@ class BillDetailWidget(QDialog):
             item_num = QStandardItem(str(item['num']))
             item_img = QStandardItem()
 
-            img_url = goods_detail['thumbnail'][0]
-            if len(img_url):
+            thumbnail = goods_detail['thumbnail']
+            if len(thumbnail):
                 resp, success = RequestData(
-                    img_url, err_msg='商品图片加载异常' + img_url)
+                    thumbnail[0], err_msg='商品图片加载异常' + thumbnail[0])
                 if not success:
                     return
                 img = QPixmap()
@@ -938,8 +990,8 @@ class MainWidget(QWidget):
 
         self.tab = QTabWidget()
         self.tab.setStyleSheet("QTabBar::tab { height: 50px; width: 300px; }")
-        self.tab.addTab(bill_page, '订单')
         self.tab.addTab(stock_page, '库存')
+        self.tab.addTab(bill_page, '订单')
         self.tab.addTab(settle_page, '结算')
 
         layout = QGridLayout()
@@ -947,7 +999,8 @@ class MainWidget(QWidget):
         self.setLayout(layout)
 
         self.setWindowTitle('收银系统 - 墨为文体用品店 V2.0')
-        self.showFullScreen()
+        # self.showFullScreen()
+        self.showMaximized()
 
     def onQuit(self):
         qApp.quit()
