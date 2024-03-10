@@ -436,7 +436,8 @@ class StockWidget(QWidget):
             item_thumbnail.pos()).row(), self.col_barcode).text()
 
         files, filter = QFileDialog.getOpenFileNames(
-            self, '选择图片', DefaultPath, '*.jpg *.png')
+            self, '选择图片', DefaultPath, '*.jpg *.png',
+            options=QFileDialog.DontUseNativeDialog)
         file_cnt = len(files)
         if file_cnt:
             for file_to_del in glob(ImageSavePath + '/' + barcode + '_*'):
@@ -553,7 +554,7 @@ class SettleWidget(QWidget):
         super().__init__()
         self.parent = parent
         self.initUI()
- 
+
         shortcut_settle = QShortcut(QKeySequence('Alt+E'), self)
         shortcut_settle.activated.connect(self.onSettle)
 
