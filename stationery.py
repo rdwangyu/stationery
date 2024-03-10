@@ -22,6 +22,7 @@ DefaultPath = 'C:/Users/wy/Desktop'
 
 Beep = None
 Resolution = QSize(1920, 1080)
+ClipBoard = None
 Barcode = ""
 
 
@@ -229,6 +230,10 @@ class StockWidget(QWidget):
                 QTimer.singleShot(0, obj.selectAll)
                 return False
         return self.parent.eventFilter(obj, e)
+    
+    def copy2clipboard(self, row, col):
+        text = self.tbl.item(row, col).text()
+        ClipBoard.setText(text)
 
     def initUI(self):
         self.tbl = QTableWidget()
@@ -237,6 +242,7 @@ class StockWidget(QWidget):
         self.tbl.setAlternatingRowColors(True)
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tbl.installEventFilter(self)
+        self.tbl.cellClicked.connect(self.copy2clipboard)
 
         self.category_selector = CategorySelector()
         self.category_selector.setModal(True)
@@ -294,9 +300,10 @@ class StockWidget(QWidget):
             brand = next(
                 (k for k in self.brand_keywords if name.find(k) != -1), '')
 
-            data, success = RequestData(BaseUrl + "/goods/" + barcode)
+            resp, success = RequestData(BaseUrl + "/cli/goods/" + barcode)
             if not success:
                 return
+            data = resp.json()
             if data.get('errmsg'):
                 data = {
                     'add_num': add_num,
@@ -1009,6 +1016,7 @@ class MainWidget(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    ClipBoard =  app.clipboard()
     Resolution = QSize(app.desktop().width(), app.desktop().height())
     print('Screen Resolution: ', Resolution)
 
