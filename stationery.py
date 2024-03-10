@@ -232,8 +232,10 @@ class StockWidget(QWidget):
         return self.parent.eventFilter(obj, e)
     
     def copy2clipboard(self, row, col):
-        text = self.tbl.item(row, col).text()
-        ClipBoard.setText(text)
+        item = self.tbl.item(row, col)
+        if not item:
+            return
+        ClipBoard.setText(item.text())
 
     def initUI(self):
         self.tbl = QTableWidget()
@@ -408,7 +410,14 @@ class StockWidget(QWidget):
             item_thumbnail.setProperty('data', thumbnail)
             item_thumbnail.clicked.connect(self.onSelectThumbnail)
 
-            item_poster = QLineEdit(';'.join(poster))
+            item_poster = QPushButton('选择海报')
+            btn_color2 = '#FF0000' if poster[0] == '' else '#00FF00'
+            item_poster.setStyleSheet(
+                'background-color: {}'.format(btn_color2))
+            item_poster.setProperty('data', thumbnail)
+            item_poster.clicked.connect(self.onSelectPoster)
+
+
             item_remark = QLineEdit(remark)
             item_brand = QLineEdit(brand)
 
@@ -458,8 +467,34 @@ class StockWidget(QWidget):
             shutil.move(file, ImageSavePath + '/' + file_name_with_barcode)
             file_url_list.append(BaseImageUrl + '/' + file_name_with_barcode)
 
-        item_thumbnail.setProperty('data', file_url_list)
-        item_thumbnail.setStyleSheet('background-color: #00FF00')
+        if len(file_url_list):
+            item_thumbnail.setProperty('data', file_url_list)
+            item_thumbnail.setStyleSheet('background-color: #00FF00')
+
+    def onSelectPoster(self, checked):
+        item_poster = self.sender()
+        barcode = self.tbl.item(self.tbl.indexAt(
+            item_poster.pos()).row(), self.col_barcode).text()
+
+        files, filter = QFileDialog.getOpenFileNames(
+            self, '选择海报', DefaultPath, '*.jpg *.png',
+            options=QFileDialog.DontUseNativeDialog)
+        file_cnt = len(files)
+        if file_cnt:
+            for file_to_del in glob(ImageSavePath + '/' + barcode + 'p_*'):
+                os.remove(file_to_del)
+
+        file_url_list = []
+        for i in range(file_cnt):
+            file = files[i]
+            file_name, file_ext = os.path.splitext(file)
+            file_name_with_barcode = barcode + 'p_' + str(i) + file_ext
+            shutil.move(file, ImageSavePath + '/' + file_name_with_barcode)
+            file_url_list.append(BaseImageUrl + '/' + file_name_with_barcode)
+
+        if len(file_url_list):
+            item_poster.setProperty('data', file_url_list)
+            item_poster.setStyleSheet('background-color: #00FF00')
 
     def onClear(self):
         self.tbl.setRowCount(0)
@@ -494,7 +529,7 @@ class StockWidget(QWidget):
                 row, self.col_retail_price).value()
             thumbnail = self.tbl.cellWidget(
                 row, self.col_thumbnail).property('data')
-            poster = self.tbl.cellWidget(row, self.col_poster).text()
+            poster = self.tbl.cellWidget(row, self.col_poster).property('data')
             name = self.tbl.cellWidget(row, self.col_name).text()
             remark = self.tbl.cellWidget(row, self.col_remark).text()
             brand = self.tbl.cellWidget(row, self.col_brand).text()
