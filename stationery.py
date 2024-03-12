@@ -14,8 +14,8 @@ import os
 from glob import glob
 
 
-BaseUrl = 'https://moreway.shop'
 # BaseUrl = 'http://127.0.0.1:8000'
+BaseUrl = 'https://moreway.shop'
 ImageSavePath = 'C:/Users/wy/Desktop/moreway_proj/moreway_server/app1/static/app1'
 BaseImageUrl = BaseUrl + '/static/app1'
 DefaultPath = 'C:/Users/wy/Desktop'
@@ -63,15 +63,17 @@ def FindRow(kw, tbl, col):
 
 
 class CategorySelector(QDialog):
+    item_name_suffix = '->'
+
     def __init__(self):
         super().__init__()
-        self.category_id = 0
-        self.category_name = ''
+        self.category_info = [0, '']
         self.initUI()
 
     def initUI(self):
         self.category_tree = QTreeView()
         self.buildCategoryTree()
+        self.category_tree.setHeaderHidden(True)
         self.category_tree.clicked.connect(self.onExpand)
         self.category_tree.doubleClicked.connect(self.onConfirm)
 
@@ -91,96 +93,126 @@ class CategorySelector(QDialog):
         self.setWindowTitle('分类')
         self.setFixedSize(Resolution / 2)
 
+    def locateAndShow(self, text):
+        suffix = self.item_name_suffix + text
+        item_lst = self.category_model.findItems(
+            suffix, Qt.MatchFlag.MatchRecursive | Qt.MatchFlag.MatchEndsWith)
+        if len(item_lst) != 0:
+            index = self.category_model.indexFromItem(item_lst[0])
+            self.category_tree.scrollTo(index)
+            self.category_tree.setCurrentIndex(index)
+
+        self.show()
+
     def buildCategoryTree(self):
-        self.category_tree.setHeaderHidden(True)
-        self.model = QStandardItemModel()
-        self.category_tree.setModel(self.model)
-
-        temp = ['', '', '', '', '', '', '']
-        root = self.model.invisibleRootItem()
-
         resp, success = RequestData(BaseUrl + '/cli/categories')
         if not success:
             return
         data = resp.json()
-        self.category_id = data[0]['id']
+        if len(data) == 0:
+            QMessageBox.warning(self, '警告', '无分类数据')
+            return
+        self.category_model = QStandardItemModel()
+        self.category_tree.setModel(self.category_model)
+
+        root = self.category_model.invisibleRootItem()
+        prev_full_name = ['', '', '', '', '', '', '']
         for i in range(len(data)):
             item = data[i]
-            id = item['id']
-            if ''.join(temp[0:1]) != item['class_0']:
+            full_name = [item['class_0'], item['class_1'], item['ext_0'],
+                         item['ext_1'], item['ext_2'], item['ext_3'], item['ext_4']]
+            suffix = self.item_name_suffix + str(item['id'])
+
+            if ''.join(prev_full_name[0:1]) != ''.join(full_name[0:1]):
                 class_0 = QStandardItem(item['class_0'])
+                class_0.setData(
+                    (item['id'], item['class_0']), Qt.ItemDataRole.UserRole)
                 class_0.setEditable(False)
                 root.appendRow(class_0)
-                temp[0] = item['class_0']
-                temp[1:] = [''] * 6
+                prev_full_name[0] = item['class_0']
+                prev_full_name[1:] = [''] * 6
 
-            if ''.join(temp[0:2]) != item['class_0'] + item['class_1']:
+            if ''.join(prev_full_name[0:2]) != ''.join(full_name[0:2]):
                 class_1 = QStandardItem(item['class_1'])
                 class_1.setEditable(False)
                 class_0.appendRow(class_1)
-                temp[1] = item['class_1']
-                temp[2:] = [''] * 5
+                prev_full_name[1] = item['class_1']
+                prev_full_name[2:] = [''] * 5
 
-            if len(item['ext_0']) == 0:
-                class_1.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+            if len(item['ext_0']) == 0:  # check if ext_0 is the end of the category
+                class_1.setText(item['class_1'] + suffix)
+                class_1.setData(
+                    (item['id'], item['class_1']), Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:3]) != item['class_0'] + item['class_1'] + item['ext_0']:
+            if ''.join(prev_full_name[0:3]) != ''.join(full_name[0:3]):
                 ext_0 = QStandardItem(item['ext_0'])
                 ext_0.setEditable(False)
                 class_1.appendRow(ext_0)
-                temp[2] = item['ext_0']
-                temp[3:] = [''] * 4
+                prev_full_name[2] = item['ext_0']
+                prev_full_name[3:] = [''] * 4
 
             if len(item['ext_1']) == 0:
-                ext_0.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+                ext_0.setText(item['ext_0'] + suffix)
+                ext_0.setData((item['id'], item['ext_0']),
+                              Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:4]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1']:
+            if ''.join(prev_full_name[0:4]) != ''.join(full_name[0:4]):
                 ext_1 = QStandardItem(item['ext_1'])
                 ext_1.setEditable(False)
                 ext_0.appendRow(ext_1)
-                temp[3] = item['ext_1']
-                temp[4:] = [''] * 3
+                prev_full_name[3] = item['ext_1']
+                prev_full_name[4:] = [''] * 3
 
             if len(item['ext_2']) == 0:
-                ext_1.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+                ext_1.setText(item['ext_1'] + suffix)
+                ext_1.setData((item['id'], item['ext_1']),
+                              Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:5]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2']:
-                ext_2 = QStandardItem(item['ext_2'])
+            if ''.join(prev_full_name[0:5]) != ''.join(full_name[0:5]):
+                ext_2 = QStandardItem()
                 ext_2.setEditable(False)
                 ext_1.appendRow(ext_2)
-                temp[4] = item['ext_2']
-                temp[5:] = [''] * 2
+                prev_full_name[4] = item['ext_2']
+                prev_full_name[5:] = [''] * 2
 
             if len(item['ext_3']) == 0:
-                ext_2.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+                ext_2.setText(item['ext_2'] + suffix)
+                ext_2.setData((item['id'], item['ext_2']),
+                              Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:6]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3']:
+            if ''.join(prev_full_name[0:6]) != ''.join(full_name[0:6]):
                 ext_3 = QStandardItem(item['ext_3'])
                 ext_3.setEditable(False)
                 ext_2.appendRow(ext_3)
-                temp[5] = item['ext_3']
-                temp[6] = ''
+                prev_full_name[5] = item['ext_3']
+                prev_full_name[6] = ''
 
             if len(item['ext_4']) == 0:
-                ext_3.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+                ext_3.setText(suffix + item['ext_3'])
+                ext_3.setData((item['id'], item['ext_3']),
+                              Qt.ItemDataRole.UserRole)
                 continue
-            if ''.join(temp[0:7]) != item['class_0'] + item['class_1'] + item['ext_0'] + item['ext_1'] + item['ext_2'] + item['ext_3'] + item['ext_4']:
-                ext_4 = QStandardItem(item['ext_4'])
+            if ''.join(prev_full_name[0:7]) != ''.join(full_name[0:7]):
+                ext_4 = QStandardItem(item['ext_4'] + suffix)
+                ext_4.setData((item['id'], item['ext_4']),
+                              Qt.ItemDataRole.UserRole)
                 ext_4.setEditable(False)
                 ext_3.appendRow(ext_4)
-                temp[6] = item['ext_4']
-                ext_4.setData((id, '-'.join(temp)), Qt.ItemDataRole.UserRole)
+                prev_full_name[6] = item['ext_4']
 
     def onConfirm(self, checked):
-        index = self.category_tree.selectedIndexes()
-        if len(index) == 0:
-            return
-        item = self.model.itemFromIndex(index[0])
+        index = self.category_tree.currentIndex()
+        item = self.category_model.itemFromIndex(index)
         if item.hasChildren():
             return
-        data = item.data(Qt.ItemDataRole.UserRole)
-        self.category_id = data[0]
-        self.category_name = data[1]
+        category_name = ''
+        while index.parent().isValid():
+            p_name = self.category_model.itemFromIndex(index.parent()).text()
+            name = item.data(Qt.ItemDataRole.UserRole)[1]
+            category_name = "{}-{}".format(p_name, name)
+            index = index.parent()
+        self.category_info = [
+            item.data(Qt.ItemDataRole.UserRole)[0], category_name]
         self.accept()
 
     def onExpand(self, index):
@@ -210,7 +242,7 @@ class StockWidget(QWidget):
 
     brand_keywords = ['小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
                       '千色坊', '文源', '宏翔', '常吉', '优佰', '掌握', '国誉',
-                      '派通', '百乐', '斑马',]
+                      '派通', '百乐', '斑马', '狂神', '绿卡', '添香']
 
     profit_ratio = 2.0
     doc_col_idx = {'barcode': 0, 'name': 0, 'cost': 0, 'num': 0}
@@ -223,14 +255,14 @@ class StockWidget(QWidget):
     def eventFilter(self, obj, e):
         if e.type() == QEvent.MouseButtonPress:
             if obj.objectName() == 'category_selector':
-                self.category_selector.show()
+                self.category_selector.locateAndShow(obj.text())
                 return True
         if e.type() == QEvent.FocusIn:
             if obj.objectName() == 'my_line_edit':
                 QTimer.singleShot(0, obj.selectAll)
                 return False
         return self.parent.eventFilter(obj, e)
-    
+
     def copy2clipboard(self, row, col):
         item = self.tbl.item(row, col)
         if not item:
@@ -417,7 +449,6 @@ class StockWidget(QWidget):
             item_poster.setProperty('data', thumbnail)
             item_poster.clicked.connect(self.onSelectPoster)
 
-
             item_remark = QLineEdit(remark)
             item_brand = QLineEdit(brand)
 
@@ -503,13 +534,14 @@ class StockWidget(QWidget):
     def updateCategory(self, code):
         item = self.focusWidget()
         if code == QDialog.DialogCode.Accepted:
-            item.setText(str(self.category_selector.category_id))
+            item.setText(str(self.category_selector.category_info[0]))
 
             row = self.tbl.currentRow()
             name = self.tbl.cellWidget(row, self.col_name).text()
             if name.strip() == '':
-                prefix = self.tbl.cellWidget(row, self.col_brand).text()
-                name = prefix + '-' + self.category_selector.category_name
+                brand_name = self.tbl.cellWidget(row, self.col_brand).text()
+                name = brand_name + '-' + \
+                    self.category_selector.category_info[1]
                 self.tbl.cellWidget(row, self.col_name).setText(name)
 
     def onImport(self):
@@ -1051,7 +1083,7 @@ class MainWidget(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    ClipBoard =  app.clipboard()
+    ClipBoard = app.clipboard()
     Resolution = QSize(app.desktop().width(), app.desktop().height())
     print('Screen Resolution: ', Resolution)
 
