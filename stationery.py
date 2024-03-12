@@ -514,7 +514,7 @@ class StockWidget(QWidget):
         self._handle_image(self.sender(), '_')
 
     def onSelectPoster(self, checked):
-        self._handle_image(self.sender, 'p_')
+        self._handle_image(self.sender(), 'p_')
 
     def onClear(self):
         self.tbl.setRowCount(0)
