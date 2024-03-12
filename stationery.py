@@ -135,6 +135,8 @@ class CategorySelector(QDialog):
 
             if ''.join(prev_full_name[0:2]) != ''.join(full_name[0:2]):
                 class_1 = QStandardItem(item['class_1'])
+                class_1.setData(
+                    (item['id'], item['class_1']), Qt.ItemDataRole.UserRole)
                 class_1.setEditable(False)
                 class_0.appendRow(class_1)
                 prev_full_name[1] = item['class_1']
@@ -142,11 +144,11 @@ class CategorySelector(QDialog):
 
             if len(item['ext_0']) == 0:  # check if ext_0 is the end of the category
                 class_1.setText(item['class_1'] + suffix)
-                class_1.setData(
-                    (item['id'], item['class_1']), Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(prev_full_name[0:3]) != ''.join(full_name[0:3]):
                 ext_0 = QStandardItem(item['ext_0'])
+                ext_0.setData((item['id'], item['ext_0']),
+                              Qt.ItemDataRole.UserRole)
                 ext_0.setEditable(False)
                 class_1.appendRow(ext_0)
                 prev_full_name[2] = item['ext_0']
@@ -154,11 +156,11 @@ class CategorySelector(QDialog):
 
             if len(item['ext_1']) == 0:
                 ext_0.setText(item['ext_0'] + suffix)
-                ext_0.setData((item['id'], item['ext_0']),
-                              Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(prev_full_name[0:4]) != ''.join(full_name[0:4]):
                 ext_1 = QStandardItem(item['ext_1'])
+                ext_1.setData((item['id'], item['ext_1']),
+                              Qt.ItemDataRole.UserRole)
                 ext_1.setEditable(False)
                 ext_0.appendRow(ext_1)
                 prev_full_name[3] = item['ext_1']
@@ -166,11 +168,11 @@ class CategorySelector(QDialog):
 
             if len(item['ext_2']) == 0:
                 ext_1.setText(item['ext_1'] + suffix)
-                ext_1.setData((item['id'], item['ext_1']),
-                              Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(prev_full_name[0:5]) != ''.join(full_name[0:5]):
-                ext_2 = QStandardItem()
+                ext_2 = QStandardItem(item['ext_2'])
+                ext_2.setData((item['id'], item['ext_2']),
+                              Qt.ItemDataRole.UserRole)
                 ext_2.setEditable(False)
                 ext_1.appendRow(ext_2)
                 prev_full_name[4] = item['ext_2']
@@ -178,11 +180,11 @@ class CategorySelector(QDialog):
 
             if len(item['ext_3']) == 0:
                 ext_2.setText(item['ext_2'] + suffix)
-                ext_2.setData((item['id'], item['ext_2']),
-                              Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(prev_full_name[0:6]) != ''.join(full_name[0:6]):
                 ext_3 = QStandardItem(item['ext_3'])
+                ext_3.setData((item['id'], item['ext_3']),
+                              Qt.ItemDataRole.UserRole)
                 ext_3.setEditable(False)
                 ext_2.appendRow(ext_3)
                 prev_full_name[5] = item['ext_3']
@@ -190,8 +192,6 @@ class CategorySelector(QDialog):
 
             if len(item['ext_4']) == 0:
                 ext_3.setText(suffix + item['ext_3'])
-                ext_3.setData((item['id'], item['ext_3']),
-                              Qt.ItemDataRole.UserRole)
                 continue
             if ''.join(prev_full_name[0:7]) != ''.join(full_name[0:7]):
                 ext_4 = QStandardItem(item['ext_4'] + suffix)
@@ -206,14 +206,17 @@ class CategorySelector(QDialog):
         item = self.category_model.itemFromIndex(index)
         if item.hasChildren():
             return
-        category_name = ''
-        while index.parent().isValid():
-            p_name = self.category_model.itemFromIndex(index.parent()).text()
-            name = item.data(Qt.ItemDataRole.UserRole)[1]
-            category_name = "{}-{}".format(p_name, name)
-            index = index.parent()
+        full_category_name = []
+
+        temp_index = index
+        temp_item = item
+        while temp_index.isValid():
+            temp_item = self.category_model.itemFromIndex(temp_index)
+            name = temp_item.data(Qt.ItemDataRole.UserRole)[1]
+            full_category_name.insert(0, name)
+            temp_index = temp_index.parent()
         self.category_info = [
-            item.data(Qt.ItemDataRole.UserRole)[0], category_name]
+            item.data(Qt.ItemDataRole.UserRole)[0], '-'.join(full_category_name)]
         self.accept()
 
     def onExpand(self, index):
@@ -487,8 +490,7 @@ class StockWidget(QWidget):
             item.pos()).row(), self.col_barcode).text()
 
         files, filter = QFileDialog.getOpenFileNames(
-            self, '选择封面', DefaultPath, '*.jpg *.png',
-            options=QFileDialog.DontUseNativeDialog)
+            self, '选择封面', DefaultPath, '*.jpg *.png')
         file_cnt = len(files)
         if file_cnt == 0:
             return
@@ -798,19 +800,29 @@ class BillDetailWidget(QDialog):
         self.field_payable = QLabel("")
         self.field_pay_platform = QLabel("")
         self.field_created_time = QLabel("")
+        self.field_remark = QLabel("")
 
         self.field_status = QComboBox()
         self.field_status.addItems(['0', '1', '2', '3'])
 
-        formLayout = QFormLayout()
-        formLayout.addRow("ID", self.field_id)
-        formLayout.addRow("SN", self.field_sn)
-        formLayout.addRow("商品数", self.field_num)
-        formLayout.addRow("折扣", self.field_discount)
-        formLayout.addRow("应收", self.field_payable)
-        formLayout.addRow("支付平台", self.field_pay_platform)
-        formLayout.addRow("账单状态", self.field_status)
-        formLayout.addRow("创建日期", self.field_created_time)
+        billFormLayout = QFormLayout()
+        billFormLayout.addRow("ID", self.field_id)
+        billFormLayout.addRow("SN", self.field_sn)
+        billFormLayout.addRow("商品数", self.field_num)
+        billFormLayout.addRow("折扣", self.field_discount)
+        billFormLayout.addRow("应收", self.field_payable)
+        billFormLayout.addRow("支付平台", self.field_pay_platform)
+        billFormLayout.addRow("账单状态", self.field_status)
+        billFormLayout.addRow("创建日期", self.field_created_time)
+        billFormLayout.addRow("备注", self.field_remark)
+
+        self.field_name = QLabel("")
+        self.field_phone = QLabel("")
+        self.field_addr = QLabel("")
+        userFormLayout = QFormLayout()
+        userFormLayout.addRow("姓名", self.field_name)
+        userFormLayout.addRow("联系电话", self.field_phone)
+        userFormLayout.addRow("收货地址", self.field_addr)
 
         self.tbl = QTableView()
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -819,8 +831,13 @@ class BillDetailWidget(QDialog):
 
         btn_confirm = QPushButton('确定')
         btn_confirm.clicked.connect(self.onConfirm)
+
+        hbox = QHBoxLayout()
+        hbox.addLayout(billFormLayout)
+        hbox.addLayout(userFormLayout)
+
         vbox = QVBoxLayout()
-        vbox.addLayout(formLayout)
+        vbox.addLayout(hbox)
         vbox.addWidget(self.tbl)
         vbox.addWidget(btn_confirm)
         self.setLayout(vbox)
@@ -848,13 +865,19 @@ class BillDetailWidget(QDialog):
 
         bill = data[0]['bill']
         self.field_id.setText(str(bill['id']))
-        self.field_sn.setText(str(bill['sn']))
+        self.field_sn.setText(bill['sn'])
         self.field_num.setText(str(bill['num']))
         self.field_discount.setText(str(bill['discount']))
         self.field_payable.setText(str(bill['payable']))
         self.field_pay_platform.setText(str(bill['pay_platform']))
         self.field_status.setCurrentText(str(bill['status']))
         self.field_created_time.setText(str(bill['created_time']))
+        self.field_remark.setText(bill['remark'])
+
+        user = data[0]['user']
+        self.field_name.setText(user['name'])
+        self.field_phone.setText(user['phone'])
+        self.field_addr.setText(user['addr'])
 
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels(self.goods_fields)
