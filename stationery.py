@@ -20,7 +20,8 @@ ImageSavePath = 'C:/Users/wy/Desktop/moreway_proj/moreway_server/app1/static/app
 BaseImageUrl = BaseUrl + '/static/app1'
 DefaultPath = 'C:/Users/wy/Desktop'
 
-Beep = None
+Beep_Confirm = None
+Beep_Update = None
 Resolution = QSize(1920, 1080)
 ClipBoard = None
 Barcode = ""
@@ -339,6 +340,7 @@ class StockWidget(QWidget):
                 return
             data = resp.json()
             if data.get('errmsg'):
+                # new goods
                 data = {
                     'add_num': add_num,
                     'name': name,
@@ -347,6 +349,7 @@ class StockWidget(QWidget):
                     'retail_price': math.floor(cost * self.profit_ratio)
                 }
             else:
+                # existed goods
                 data['name'] = name
                 data['add_num'] = add_num
                 data['cost_price'] = cost
@@ -378,7 +381,7 @@ class StockWidget(QWidget):
         id = data.get('id', 0)
         category = data.get('category', {'id': -1})
         num = data.get('num', 0)
-        add_num = data.get('add_num', 0)
+        add_num = data.get('add_num', 1)
         name = data.get('name', '')
         remark = data.get('remark', '')
         brand = data.get('brand', '')
@@ -392,6 +395,7 @@ class StockWidget(QWidget):
         if row != -1:
             item = self.tbl.cellWidget(row, self.col_add_num)
             item.setValue(item.value() + add_num)
+            Beep_Update.play()
         else:
             row = self.tbl.rowCount()
             self.tbl.setRowCount(row + 1)
@@ -474,58 +478,43 @@ class StockWidget(QWidget):
             self.tbl.setCellWidget(row, self.col_op, btn_remove)
             self.tbl.setCellWidget(row, self.col_on_sale, item_on_sale)
 
+            Beep_Confirm.play()
+
         self.updateTotal()
-        Beep.play()
+
+    def _handle_image(self, item, label, del_old=True, del_source=True):
+        barcode = self.tbl.item(self.tbl.indexAt(
+            item.pos()).row(), self.col_barcode).text()
+
+        files, filter = QFileDialog.getOpenFileNames(
+            self, '选择封面', DefaultPath, '*.jpg *.png',
+            options=QFileDialog.DontUseNativeDialog)
+        file_cnt = len(files)
+        if file_cnt == 0:
+            return
+
+        if del_old:
+            for file_to_del in glob(ImageSavePath + '/' + barcode + label + '*'):
+                os.remove(file_to_del)
+
+        cp_fn = shutil.move if del_source else shutil.copy
+        url_lst = []
+        for i in range(file_cnt):
+            file = files[i]
+            file_unuse, file_ext = os.path.splitext(file)
+            file_with_barcode = barcode + label + str(i) + file_ext
+            cp_fn(file, ImageSavePath + '/' + file_with_barcode)
+            url_lst.append(BaseImageUrl + '/' + file_with_barcode)
+
+        if len(url_lst):
+            item.setProperty('data', url_lst)
+            item.setStyleSheet('background-color: #00FF00')
 
     def onSelectThumbnail(self, checked):
-        item_thumbnail = self.sender()
-        barcode = self.tbl.item(self.tbl.indexAt(
-            item_thumbnail.pos()).row(), self.col_barcode).text()
-
-        files, filter = QFileDialog.getOpenFileNames(
-            self, '选择图片', DefaultPath, '*.jpg *.png',
-            options=QFileDialog.DontUseNativeDialog)
-        file_cnt = len(files)
-        if file_cnt:
-            for file_to_del in glob(ImageSavePath + '/' + barcode + '_*'):
-                os.remove(file_to_del)
-
-        file_url_list = []
-        for i in range(file_cnt):
-            file = files[i]
-            file_name, file_ext = os.path.splitext(file)
-            file_name_with_barcode = barcode + '_' + str(i) + file_ext
-            shutil.move(file, ImageSavePath + '/' + file_name_with_barcode)
-            file_url_list.append(BaseImageUrl + '/' + file_name_with_barcode)
-
-        if len(file_url_list):
-            item_thumbnail.setProperty('data', file_url_list)
-            item_thumbnail.setStyleSheet('background-color: #00FF00')
+        self._handle_image(self.sender(), '_')
 
     def onSelectPoster(self, checked):
-        item_poster = self.sender()
-        barcode = self.tbl.item(self.tbl.indexAt(
-            item_poster.pos()).row(), self.col_barcode).text()
-
-        files, filter = QFileDialog.getOpenFileNames(
-            self, '选择海报', DefaultPath, '*.jpg *.png',
-            options=QFileDialog.DontUseNativeDialog)
-        file_cnt = len(files)
-        if file_cnt:
-            for file_to_del in glob(ImageSavePath + '/' + barcode + 'p_*'):
-                os.remove(file_to_del)
-
-        file_url_list = []
-        for i in range(file_cnt):
-            file = files[i]
-            file_name, file_ext = os.path.splitext(file)
-            file_name_with_barcode = barcode + 'p_' + str(i) + file_ext
-            shutil.move(file, ImageSavePath + '/' + file_name_with_barcode)
-            file_url_list.append(BaseImageUrl + '/' + file_name_with_barcode)
-
-        if len(file_url_list):
-            item_poster.setProperty('data', file_url_list)
-            item_poster.setStyleSheet('background-color: #00FF00')
+        self._handle_image(self.sender, 'p_')
 
     def onClear(self):
         self.tbl.setRowCount(0)
@@ -592,7 +581,7 @@ class StockWidget(QWidget):
                 QMessageBox.warning(self, '警告', data['errmsg'])
                 return
 
-        Beep.play()
+        Beep_Confirm.play()
         self.onClear()
 
     def handleInput(self, text):
@@ -714,7 +703,7 @@ class SettleWidget(QWidget):
             self.tbl.setCellWidget(row, self.col_op, btn_remove)
 
         self.updateTotal()
-        Beep.play()
+        Beep_Confirm.play()
 
     def updateTotal(self):
         total_num = 0
@@ -787,7 +776,7 @@ class SettleWidget(QWidget):
             return
 
         self.onClear()
-        Beep.play()
+        Beep_Confirm.play()
 
     def onClear(self):
         self.tbl.setRowCount(0)
@@ -1087,7 +1076,8 @@ if __name__ == "__main__":
     Resolution = QSize(app.desktop().width(), app.desktop().height())
     print('Screen Resolution: ', Resolution)
 
-    Beep = QSound('./dong.wav', app)
+    Beep_Confirm = QSound('./dong.wav', app)
+    Beep_Update = QSound('./hua.wav', app)
     main = MainWidget()
 
     sys.exit(app.exec_())
