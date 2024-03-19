@@ -11,8 +11,8 @@ import xlrd
 import math
 
 
-# BaseUrl = 'http://127.0.0.1:8000'
 BaseUrl = 'https://moreway.shop'
+# BaseUrl = 'http://127.0.0.1:8000'
 DefaultPath = 'C:/Users/wy/Desktop'
 
 Beep_Confirm = None
@@ -20,7 +20,7 @@ Beep_Update = None
 Resolution = QSize(1920, 1080)
 ClipBoard = None
 Barcode = ''
-Title = '收银系统 - 墨为文体用品店 V2.0'
+Title = '收银系统 - 墨为文体用品店 V2.0 {}'.format(BaseUrl)
 
 
 def RequestData(url, method='GET', data=None, json_data=None, files=None, err_msg='服务器异常'):
@@ -1062,7 +1062,8 @@ class MainWidget(QWidget):
         self.setLayout(layout)
 
         self.setWindowTitle(Title)
-        self.showFullScreen()
+        # self.showFullScreen()
+        self.showMaximized()
 
     def onQuit(self):
         qApp.quit()
