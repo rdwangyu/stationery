@@ -30,9 +30,10 @@ def RequestData(url, method='GET', data=None, json_data=None, files=None, err_ms
         url=url, data=data, json=json_data, files=files, method=method)
     end_time = datetime.now()
     duration = end_time - start_time
-    print('request...', url, method, duration, data)
+    print('request...', url, method, duration, data, json_data)
     if resp.status_code != 200:
         QMessageBox.critical(None, '严重', err_msg)
+        exit()
         return None, False
     return resp, True
 
@@ -241,7 +242,7 @@ class StockWidget(QWidget):
              '成本', '售价', '封面图', '海报图',
              '备注', '品牌', '是否上架', '操作']
 
-    brand_keywords = ['小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
+    brand_keywords = ['喜博', '小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
                       '千色坊', '文源', '宏翔', '常吉', '优佰', '掌握', '国誉',
                       '派通', '百乐', '斑马', '狂神', '绿卡', '添香']
 
@@ -929,11 +930,17 @@ class BillWidget(QWidget):
         self.stat_form.addRow('日收益:', QLabel(
             '0.00', alignment=Qt.AlignmentFlag.AlignRight))
 
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check_new_bill)
+
         btn_refresh = QPushButton('刷新')
         btn_refresh.clicked.connect(self.loadData)
+        self.btn_monitor = QPushButton('开启监听')
+        self.btn_monitor.clicked.connect(self.onStartMonitor)
 
         vbox = QVBoxLayout()
         vbox.addWidget(btn_refresh)
+        vbox.addWidget(self.btn_monitor)
         vbox.addStretch(1)
         vbox.addLayout(self.stat_form)
 
@@ -942,6 +949,14 @@ class BillWidget(QWidget):
         layout_grid.addLayout(vbox, 0, 1, 1, 1)
 
         self.setLayout(layout_grid)
+
+    def onStartMonitor(self):
+        if self.timer.isActive():
+            self.timer.stop()
+            self.btn_monitor.setText('开启监听')
+        else:
+            self.timer.start(1000 * 30) # 30s
+            self.btn_monitor.setText('关闭监听')
 
     def onItemClicked(self, item):
         if item.column() == self.col_id:
@@ -1022,6 +1037,16 @@ class BillWidget(QWidget):
         item_total_last_week.setText(str(data['last_week']))
         item_total_this_month.setText(str(data['this_month']))
         item_total_this_quarter.setText(str(data['this_quarter']))
+
+    def check_new_bill(self):
+        print('checking...')
+        resp, success = RequestData(
+            url=BaseUrl + '/cli/bills/check_new')
+        if not success:
+            return
+        data = resp.json()
+        if len(data) > 0:
+            Beep_Update.play()
 
 
 class MainWidget(QWidget):
