@@ -17,6 +17,7 @@ DefaultPath = 'C:/Users/wy/Desktop'
 
 Beep_Confirm = None
 Beep_Update = None
+Beep_Money_Come_On = None
 Resolution = QSize(1920, 1080)
 ClipBoard = None
 Barcode = ''
@@ -189,7 +190,7 @@ class CategorySelector(QDialog):
                 prev_full_name[6] = ''
 
             if len(item['ext_4']) == 0:
-                ext_3.setText(suffix + item['ext_3'])
+                ext_3.setText(item['ext_3'] + suffix)
                 continue
             if ''.join(prev_full_name[0:7]) != ''.join(full_name[0:7]):
                 ext_4 = QStandardItem(item['ext_4'] + suffix)
@@ -930,8 +931,8 @@ class BillWidget(QWidget):
         self.stat_form.addRow('日收益:', QLabel(
             '0.00', alignment=Qt.AlignmentFlag.AlignRight))
 
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.check_new_bill)
+        self.timer_check_new = QTimer(self)
+        self.timer_check_new.timeout.connect(self.check_new_bill)
 
         btn_refresh = QPushButton('刷新')
         btn_refresh.clicked.connect(self.loadData)
@@ -951,11 +952,11 @@ class BillWidget(QWidget):
         self.setLayout(layout_grid)
 
     def onStartMonitor(self):
-        if self.timer.isActive():
-            self.timer.stop()
+        if self.timer_check_new.isActive():
+            self.timer_check_new.stop()
             self.btn_monitor.setText('开启监听')
         else:
-            self.timer.start(1000 * 30) # 30s
+            self.timer_check_new.start(1000 * 30) # 30s
             self.btn_monitor.setText('关闭监听')
 
     def onItemClicked(self, item):
@@ -1046,7 +1047,7 @@ class BillWidget(QWidget):
             return
         data = resp.json()
         if len(data) > 0:
-            Beep_Update.play()
+            Beep_Money_Come_On.play()
 
 
 class MainWidget(QWidget):
@@ -1102,6 +1103,7 @@ if __name__ == '__main__':
 
     Beep_Confirm = QSound('./dong.wav', app)
     Beep_Update = QSound('./hua.wav', app)
+    Beep_Money_Come_On = QSound('./money_come_on.wav', app)
     main = MainWidget()
 
     sys.exit(app.exec_())
