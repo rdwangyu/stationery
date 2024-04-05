@@ -10,7 +10,7 @@ from datetime import datetime
 import xlrd
 import math
 
-
+Version = '1.0'
 BaseUrl = 'https://moreway.shop'
 # BaseUrl = 'http://127.0.0.1:8000'
 DefaultPath = 'C:/Users/wy/Desktop'
@@ -21,7 +21,7 @@ Beep_Money_Come_On = None
 Resolution = QSize(1920, 1080)
 ClipBoard = None
 Barcode = ''
-Title = '收银系统 - 墨为文体用品店 V2.0 {}'.format(BaseUrl)
+Title = '收银系统{} - 墨为文体用品店 V2.0 {}'.format(Version, BaseUrl)
 
 
 def RequestData(url, method='GET', data=None, json_data=None, files=None, err_msg='服务器异常'):
@@ -243,7 +243,7 @@ class StockWidget(QWidget):
              '成本', '售价', '封面图', '海报图',
              '备注', '品牌', '是否上架', '操作']
 
-    brand_keywords = ['喜博', '小卡尼', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
+    brand_keywords = ['喜博', '小卡尼', '普乐士', '得力', '晨光', '黑龙', '昊霆', '毛毛鱼',
                       '千色坊', '文源', '宏翔', '常吉', '优佰', '掌握', '国誉',
                       '派通', '百乐', '斑马', '狂神', '绿卡', '添香']
 
