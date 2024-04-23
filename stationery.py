@@ -21,7 +21,7 @@ Beep_Money_Come_On = None
 Resolution = QSize(1920, 1080)
 ClipBoard = None
 Barcode = ''
-Title = '收银系统{} - 墨为文体用品店 V2.0 {}'.format(Version, BaseUrl)
+Title = '收银系统{} - XXX V2.0 {}'.format(Version, BaseUrl)
 
 
 def RequestData(url, method='GET', data=None, json_data=None, files=None, err_msg='服务器异常'):
@@ -756,7 +756,7 @@ class SettleWidget(QWidget):
             return
 
         self.onClear()
-        Beep_Confirm.play()
+        Beep_Confirm.play() 
 
     def onClear(self):
         self.tbl.setRowCount(0)
